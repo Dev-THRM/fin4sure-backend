@@ -14,7 +14,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: "http://localhost:5173",    // frontend origin
+    origin: "https://fin4sure-frontend.vercel.app/",    // frontend origin
     methods: ["GET", "PATCH", "POST", "PUT", "DELETE"],
     credentials: true,
   })
