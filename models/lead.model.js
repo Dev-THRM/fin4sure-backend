@@ -1,73 +1,62 @@
-import mongoose from "mongoose";
-import { LOAN_PRODUCT_IDS } from "../utils/constants.js";
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/db.js';
+import { LOAN_PRODUCT_IDS } from '../utils/constants.js';
 
-const leadSchema = new mongoose.Schema(
-  {
-    client_id: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    name: {
-      type: String,
-      required: true,
-      trim: true
-    },
-
-    email: {
-      type: String,
-      required: true,
-      lowercase: true,
-      trim: true
-    },
-
-    number: {
-      type: String,
-      required: true,
-      trim: true
-    },
-
-    pan_hash: {
-      type: String,
-      required: true,
-    },
-
-    pan_encrypted: {
-      type: String,
-      required: true
-    },
-
-    product: {
-      type: String,
-      required: true,
-      enum: LOAN_PRODUCT_IDS
-    },
-
-    status: {
-      type: String,
-      enum: ["pending", "approved", "rejected"],
-      default: "pending"
-    },
-
-    broker_id: {
-      type: String,
-      default: "self"
-    },
-
-    dob: {
-      type: String,
-      required: true
-    },
-
-    address: {
-      type: String,
-      required: true
-    },
-    statusUpdatedAt: {
-      type: Date
-    }
+const Lead = sequelize.define('Lead', {
+  client_id: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    trim: true,
   },
-  { timestamps: true }
-);
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    trim: true,
+  },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    validate: {
+      isEmail: true,
+    },
+  },
+  number: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  pan_hash: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  pan_encrypted: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  product: {
+    type: DataTypes.ENUM(...LOAN_PRODUCT_IDS),
+    allowNull: false,
+  },
+  status: {
+    type: DataTypes.ENUM('pending', 'approved', 'rejected'),
+    defaultValue: 'pending',
+  },
+  broker_id: {
+    type: DataTypes.STRING,
+    defaultValue: 'self',
+  },
+  dob: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  address: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  statusUpdatedAt: {
+    type: DataTypes.DATE,
+  },
+}, {
+  timestamps: true,
+});
 
-export default mongoose.model("lead", leadSchema);
+export default Lead;

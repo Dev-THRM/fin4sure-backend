@@ -1,27 +1,48 @@
-import mongoose, { mongo, Schema } from "mongoose";
-import bcrypt from "bcrypt"
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/db.js';
+import bcrypt from 'bcrypt';
 
-const adminSchema = new Schema(
-    {
-        name: { type: String, required: true, trim: true },
-        // role:{type : String, default : "admin"},
-        email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-        number: { type: String, required: true, unique: true, trim: true },
-       password:{ type: String, required: true }
-
+const Admin = sequelize.define('Admin', {
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    trim: true,
+  },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+    validate: {
+      isEmail: true,
     },
-    {
-        timestamps:true
-    }
-);
+  },
+  number: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
+  password: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+}, {
+  timestamps: true,
+  hooks: {
+    beforeCreate: async (admin) => {
+      if (admin.password) {
+        admin.password = await bcrypt.hash(admin.password, 10);
+      }
+    },
+    beforeUpdate: async (admin) => {
+      if (admin.changed('password')) {
+        admin.password = await bcrypt.hash(admin.password, 10);
+      }
+    },
+  },
+});
 
-adminSchema.pre("save", async function () {
-    if (this.isModified("password")) {
-    this.password = await bcrypt.hash(this.password, 10)}
-})
+Admin.prototype.isPasswordCorrect = async function (password) {
+  return await bcrypt.compare(password, this.password);
+};
 
-adminSchema.methods.isPasswordCorrect = async function(password) {
-    return await bcrypt.compare(password, this.password)
-}
-
-export default mongoose.model("admin",adminSchema)
+export default Admin;

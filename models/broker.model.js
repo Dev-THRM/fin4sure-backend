@@ -1,45 +1,84 @@
-import mongoose from "mongoose";
-import bcrypt from "bcrypt";
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/db.js';
+import bcrypt from 'bcrypt';
 
-const brokerschema = new mongoose.Schema(
-  {
-    brokerId: { type: String, required: true, unique: true },
-    name: { type: String, required: true, trim: true },
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
-      trim: true,
-    },
-    number: { type: String, required: true, unique: true, trim: true },
-    password: { type: String, required: true },
-    status: {
-      type: String,
-      enum: ["pending", "approved", "rejected"],
-      default: "pending",
-    },
-    clients: [{ type: String, sparse: true }],
-    dob: { type: String, required: true },
-    address: { type: String, required: true },
-    pincode: { type: String, required: true},
-    district: { type: String, required: true},
-    state: { type: String, required: true},
-    statusUpdatedAt: {
-      type: Date,
+const Broker = sequelize.define('Broker', {
+  brokerId: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    trim: true,
+  },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+    validate: {
+      isEmail: true,
     },
   },
-  { timestamps: true },
-);
-
-brokerschema.pre("save", async function () {
-  if (this.isModified("password")) {
-    this.password = await bcrypt.hash(this.password, 10);
-  }
+  number: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
+  password: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  status: {
+    type: DataTypes.ENUM('pending', 'approved', 'rejected'),
+    defaultValue: 'pending',
+  },
+  clients: {
+    type: DataTypes.JSON,
+    defaultValue: [],
+  },
+  dob: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  address: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  pincode: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  district: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  state: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  statusUpdatedAt: {
+    type: DataTypes.DATE,
+  },
+}, {
+  timestamps: true,
+  hooks: {
+    beforeCreate: async (broker) => {
+      if (broker.password) {
+        broker.password = await bcrypt.hash(broker.password, 10);
+      }
+    },
+    beforeUpdate: async (broker) => {
+      if (broker.changed('password')) {
+        broker.password = await bcrypt.hash(broker.password, 10);
+      }
+    },
+  },
 });
 
-brokerschema.methods.isPasswordCorrect = async function (password) {
+Broker.prototype.isPasswordCorrect = async function (password) {
   return await bcrypt.compare(password, this.password);
 };
 
-export default mongoose.model("broker", brokerschema);
+export default Broker;

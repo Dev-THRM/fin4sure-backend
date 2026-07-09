@@ -1,19 +1,18 @@
-import mongoose, { Schema } from "mongoose";
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/db.js';
 
-const bankSchema = new Schema (
-    {
-        name: {type : String, required : true},
-            product: [
-                {
-                    name : {type : String, required : true, unique : true},
-                    intrest_rate : {type : Boolean, required : true, unique : true}
-                }
-            ]
-    },
-    {
-        timestamps: true
-    }
-)
+const Bank = sequelize.define('Bank', {
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  product: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    defaultValue: []
+  },
+}, {
+  timestamps: true,
+});
 
-export default mongoose.model("bank", bankSchema)
-
+export default Bank;
