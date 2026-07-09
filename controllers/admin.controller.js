@@ -9,12 +9,12 @@ import ExcelJS from "exceljs";
 ----------------------------------------------------- */
 export const userCount = async (req, res) => {
   try {
-    const totalClients = await Client.countDocuments();
-    const totalBrokers = await Broker.countDocuments();
+    const totalClients = await Client.count();
+    const totalBrokers = await Broker.count();
 
-    const approvedBrokers = await Broker.countDocuments({ status: "approved" });
-    const pendingBrokers = await Broker.countDocuments({ status: "pending" });
-    const pendingLeads = await Lead.countDocuments({ status: "pending" });
+    const approvedBrokers = await Broker.count({ where: { status: "approved" } });
+    const pendingBrokers = await Broker.count({ where: { status: "pending" } });
+    const pendingLeads = await Lead.count({ where: { status: "pending" } });
 
     res.json({
       totalUsers: totalClients + totalBrokers,
@@ -34,19 +34,22 @@ export const userCount = async (req, res) => {
 ----------------------------------------------------- */
 export const brokersWithFullData = async (req, res) => {
   try {
-    const brokers = await Broker.find()
-      .select("-password -__v")
-      .lean();
+    const brokers = await Broker.findAll({
+      attributes: { exclude: ['password', 'createdAt', 'updatedAt'] },
+      raw: true
+    });
 
     const result = await Promise.all(
       brokers.map(async (broker) => {
-        const clients = await Client.find({
-          broker_id: broker.brokerId
-        }).select("-password -__v");
+        const clients = await Client.findAll({
+          where: { broker_id: broker.brokerId },
+          attributes: { exclude: ['password'] }
+        });
 
-        const leads = await Lead.find({
-          broker_id: broker.brokerId
-        }).select("-pan_encrypted -__v");
+        const leads = await Lead.findAll({
+          where: { broker_id: broker.brokerId },
+          attributes: { exclude: ['pan_encrypted'] }
+        });
 
         return {
           ...broker,
@@ -74,19 +77,21 @@ export const allLeads = async (req, res) => {
     const filter = {};
     if (status) filter.status = status;
 
-    const leads = await Lead.find(filter)
-      .sort({ createdAt: -1 })
-      .lean();
+    const leads = await Lead.findAll({
+      where: filter,
+      order: [['createdAt', 'DESC']],
+      raw: true
+    });
 
     const enrichedLeads = await Promise.all(
       leads.map(async (lead) => {
         let broker = null;
 
         if (lead.broker_id !== "self") {
-          broker = await Broker.findOne(
-            { brokerId: lead.broker_id },
-            "name brokerId email number"
-          );
+          broker = await Broker.findOne({
+            where: { brokerId: lead.broker_id },
+            attributes: ['name', 'brokerId', 'email', 'number']
+          });
         }
 
         return {
@@ -114,13 +119,15 @@ export const updateBrokerStatus = async (req, res) => {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    const broker = await Broker.findOneAndUpdate(
-      { brokerId },
-      { status,
-        statusUpdatedAt: new Date()
-       },
-      { new: true }
-    ).select("-password -__v");
+    await Broker.update(
+      { status, statusUpdatedAt: new Date() },
+      { where: { brokerId } }
+    );
+
+    const broker = await Broker.findOne({
+      where: { brokerId },
+      attributes: { exclude: ['password'] }
+    });
 
     if (!broker) {
       return res.status(404).json({ message: "Broker not found" });
@@ -143,14 +150,14 @@ export const updateLeadStatus = async (req, res) => {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    const lead = await Lead.findByIdAndUpdate(
-      leadId,
-      { status,
-        statusUpdatedAt: new Date()
-       },
-      { new: true }
+    // leadId might refer to the primary key id
+    await Lead.update(
+      { status, statusUpdatedAt: new Date() },
+      { where: { id: leadId } }
     );
- 
+    
+    const lead = await Lead.findByPk(leadId);
+
     if (!lead) {
       return res.status(404).json({ message: "Lead not found" });
     }
@@ -169,7 +176,7 @@ export const updateLeadStatus = async (req, res) => {
 export const createAdmin = async (req, res) => {
   const { name, email, number, password } = req.body;
 
-  const exists = await Admin.findOne({ email });
+  const exists = await Admin.findOne({ where: { email } });
   if (exists) {
     return res.status(409).json({ message: "Admin already exists" });
   }
@@ -183,7 +190,7 @@ export const createAdmin = async (req, res) => {
 
   res.json({
     message: "Admin created successfully",
-    id: admin._id
+    id: admin.id
   });
 };
 
@@ -198,7 +205,7 @@ export const exportData = async (req, res) => {
     
     // -------------------- broker --------------------
     if (type === "brokers") {
-    const data_b = await Broker.find().lean();
+    const data_b = await Broker.findAll({ raw: true });
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Report");
 
@@ -230,7 +237,7 @@ export const exportData = async (req, res) => {
         district: item.district,
         state: item.state,
         broker_id: item.brokerId,
-        clients: item.clients,
+        clients: item.clients ? item.clients.length : 0,
         createdAt: item.createdAt
       });
 
@@ -270,7 +277,7 @@ export const exportData = async (req, res) => {
 
     // -------------------- client --------------------
     if (type === "clients") {
-    const data_c = await Lead.find().lean();
+    const data_c = await Lead.findAll({ raw: true });
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Report");
@@ -331,8 +338,8 @@ export const exportData = async (req, res) => {
     res.end();
     }
     if(type === "All") {
-    const data_c = await Lead.find().lean();
-    const data_b = await Broker.find().lean();
+    const data_c = await Lead.findAll({ raw: true });
+    const data_b = await Broker.findAll({ raw: true });
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Report");
@@ -374,7 +381,7 @@ export const exportData = async (req, res) => {
         district: item.district,
         state: item.state,
         broker_id_b: item.brokerId,
-        clients: item.clients,
+        clients: item.clients ? item.clients.length : 0,
         createdAt_b: item.createdAt
       });
 

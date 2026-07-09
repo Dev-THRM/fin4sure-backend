@@ -4,9 +4,10 @@ import jwt from "jsonwebtoken";
 // ----------------- GETS THE PRODUCT CLINET APPLIED FOR -----------------
 export const getClientProducts = async (req, res) => {
   try {
-    const _id = req.user._id;
-    const client = await Client.findById(_id)
-      .select("product");
+    const id = req.user.id || req.user._id;
+    const client = await Client.findByPk(id, {
+      attributes: ['product']
+    });
 
     if(!client) {
       return res.status(404).json({message : "no product found"})
@@ -22,20 +23,30 @@ export const getClientProducts = async (req, res) => {
 
 export const applyProduct = async (req, res) => {
   try {
-    const _id = req.user._id;
+    const id = req.user.id || req.user._id;
     const { product } = req.body;
 
     if (!product) {
       return res.status(400).json({ message: "Product required" });
     }
 
-    const client = await Client.findById(_id);
+    const client = await Client.findByPk(id);
 
-    client.product.push({
+    if (!client) {
+      return res.status(404).json({ message: "Client not found" });
+    }
+
+    // Since product is a JSON array, we need to get the existing array, push, and set it again
+    const currentProducts = client.product || [];
+    currentProducts.push({
       product,
       status: "pending"
     });
 
+    client.product = currentProducts;
+    
+    // Explicitly tell Sequelize that the JSON field has changed
+    client.changed('product', true);
     await client.save();
 
     return res.json({ message: "Product application submitted" });

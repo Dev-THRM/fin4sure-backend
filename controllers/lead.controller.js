@@ -7,7 +7,7 @@ const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
 
 export const applyLoan = async (req, res) => {
 
-    const userId = req.user._id;
+    const userId = req.user.id || req.user._id;
     const { pan, product, dob, address, state, district, pincode } = req.body;
     console.log({message: "got body"})
 
@@ -33,8 +33,9 @@ export const applyLoan = async (req, res) => {
     }
     console.log({message: "verified pan"})
     // ---------- fetch client snapshot ----------
-    const client = await Client.findById(userId)
-      .select("name email number broker_id dob address");
+    const client = await Client.findByPk(userId, {
+      attributes: ["name", "email", "number", "broker_id", "dob", "address", "product"]
+    });
     console.log({message: "fetching user id to put product"})
     if (!client) {
       return res.status(404).json({
@@ -44,7 +45,7 @@ export const applyLoan = async (req, res) => {
     console.log({message: "hashing pan"})
     // ---------- duplicate PAN check ----------
     const panHash = hashPAN(cleanPAN);
-    const exists = await Lead.findOne({product: product, pan_hash: panHash });
+    const exists = await Lead.findOne({ where: { product: product, pan_hash: panHash } });
     console.log({message: "checking if pan exist"})
     if (exists) {
       return res.status(409).json({
@@ -57,7 +58,7 @@ export const applyLoan = async (req, res) => {
     console.log({message: "encrypting pan"})
     console.log(product)
     // ---------- create lead ----------
-    const lead = await Lead.create({// added
+    const lead = await Lead.create({
       client_id: userId,
       name: client.name,
       email: client.email,
@@ -70,31 +71,26 @@ export const applyLoan = async (req, res) => {
       address: pincode+","+address+","+district+","+state
     });
 
-    const Client_update = await Client.findByIdAndUpdate(
-      {
-        _id: userId
-      },{$push : {
-      product : {product: product}
-      },
-        $set : {
-      pan_hash: panHash,
-      pan_encrypted: encryptedPAN,
-      dob: dob,
-      address: address,
-      state: state,
-      district: district,
-      pincode: pincode
-    }
-  },{
-    new : true
-  }
-);
+    const currentProducts = client.product || [];
+    currentProducts.push({ product: product });
+
+    client.product = currentProducts;
+    client.pan_hash = panHash;
+    client.pan_encrypted = encryptedPAN;
+    client.dob = dob;
+    client.address = address;
+    client.state = state;
+    client.district = district;
+    client.pincode = pincode;
+    client.changed('product', true);
+
+    const Client_update = await client.save();
 
     console.log({message: "creating leaad"})
     console.log({message : Client_update})
     return res.status(201).json({
       message: "Loan application submitted successfully",
-      leadId: lead._id,
+      leadId: lead.id,
       status: lead.status
     });
 
@@ -102,10 +98,12 @@ export const applyLoan = async (req, res) => {
 
 export const getMyLeads = async (req, res) => { // should be in client cause it provides client data to the client dashboard
   try {
-    const _id = req.user._id;
-    const leads = await Lead.find({client_id : _id})
-      .sort({ createdAt: -1 })
-      .select("product status createdAt");
+    const userId = req.user.id || req.user._id;
+    const leads = await Lead.findAll({
+      where: { client_id : userId },
+      order: [['createdAt', 'DESC']],
+      attributes: ["product", "status", "createdAt"]
+    });
 
     res.json(leads);
 
