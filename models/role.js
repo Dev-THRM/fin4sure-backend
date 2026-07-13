@@ -10,4 +10,11 @@ const Role = sequelize.define('Role', {
   timestamps: true,
 });
 
+Role.associate = (models) => {
+  Role.hasMany(models.User, {
+    foreignKey: 'role_id',
+    as: 'users'
+  });
+};
+
 export default Role;
