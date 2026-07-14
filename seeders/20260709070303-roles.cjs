@@ -15,26 +15,26 @@ module.exports = {
      * }], {});
     */
 
-    await queryInterface.bulkInsert('Role', [
+    await queryInterface.bulkInsert('Roles', [
     {
       name: 'Admin',
-      created_at: new Date(),
-      updated_at: new Date()
+      createdAt: new Date(),
+      updatedAt: new Date()
     },
     {
       name: 'Borrower',
-      created_at: new Date(),
-      updated_at: new Date()
+      createdAt: new Date(),
+      updatedAt: new Date()
     },
     {
       name: 'Lender',
-      created_at: new Date(),
-      updated_at: new Date()
+      createdAt: new Date(),
+      updatedAt: new Date()
     },
     {
       name: "Partner",
-      created_at: new Date(),
-      updated_at: new Date()
+      createdAt: new Date(),
+      updatedAt: new Date()
     }
   ], {})
   },
@@ -44,7 +44,7 @@ module.exports = {
      * Add commands to revert seed here.
      */
   
-    await queryInterface.bulkDelete('Role', null, {});
+    await queryInterface.bulkDelete('Roles', null, {});
 
   }
 };
