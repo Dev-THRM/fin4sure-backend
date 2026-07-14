@@ -6,6 +6,8 @@ import authRouter from "./routes/auth.routes.js"; // ADD THIS
 import adminRouter from "./routes/admin.routes.js";
 import brokerRouter from "./routes/broker.routes.js";
 import clientRouter from "./routes/client.routes.js";
+import lenderRouter from "./routes/lender.routes.js";
+import loanTypeRouter from "./routes/loanType.routes.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 
@@ -15,13 +17,15 @@ import './models/bank.model.js';
 import './models/broker.model.js';
 import './models/client.model.js';
 import './models/lead.model.js';
+import './models/lender.js';
+import './models/loan_type.js';
 
 
 const app = express();
 
 app.use(
   cors({
-    origin: "https://fin4sure-frontend.vercel.app",    // frontend origin
+    origin: ["https://fin4sure-frontend.vercel.app", "http://localhost:5173"],
     methods: ["GET", "PATCH", "POST", "PUT", "DELETE"],
     credentials: true,
   })
@@ -35,6 +39,8 @@ app.use("/api/auth", authRouter); // ADD THIS
 app.use("/api/admin", adminRouter);
 app.use("/api/broker", brokerRouter);
 app.use("/api/client", clientRouter);
+app.use("/api/lenders", lenderRouter);
+app.use("/api/loan-types", loanTypeRouter);
 
 const PORT = process.env.PORT || 8000;
 
