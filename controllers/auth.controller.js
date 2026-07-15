@@ -6,22 +6,62 @@ import {
   profileService,
   profileUpdateService
 } from "../services/auth.service.js";
+import { signAccessToken } from "../utils/jwt.utlis.js";
+import Partner from "../models/partner.model.js";
+import City from "../models/city.model.js";
 
 export const signUpHandler = async (req, res) => {
   try {
-    const { name, email, number, password, role } = req.body;
+    const { name, email, number, password, role, dob, address, state, district, pincode, city } = req.body;
     let role_id = 1; // Default to client
 
     if (!name || !email || !number || !password || !role) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    if (role === "borrower") role_id = 1;
-    else if (role === "partner") role_id = 2;
+    if (role === "borrower" || role === "client") role_id = 1;
+    else if (role === "partner" || role === "broker") role_id = 2;
     else if (role === "admin") role_id = 3;
 
-    await signUpService({ name, email, number, password, role_id });
-    return res.json({ redirect: "/login" });
+    const newUser = await signUpService({
+      name,
+      email,
+      number,
+      password,
+      role_id,
+      dob,
+      address,
+      state,
+      district,
+      pincode,
+      city
+    });
+
+    const accessToken = signAccessToken({
+      _id: newUser.id,
+      role: newUser.role_id,
+    });
+
+    let roleStr = "borrower";
+    if (newUser.role_id === 2) roleStr = "partner";
+    if (newUser.role_id === 3) roleStr = "admin";
+
+    return res
+      .cookie("AccessToken", accessToken, {
+        httpOnly: true,
+        secure: false,
+        sameSite: "lax",
+        maxAge: 24 * 60 * 60 * 1000,
+      })
+      .json({
+        success: true,
+        user: {
+          _id: newUser.id,
+          name: newUser.name,
+          email: newUser.email,
+          role: roleStr,
+        }
+      });
   } catch (err) {
     console.error("Signup error:", err);
     if (err.message === "User already exists") {
@@ -154,12 +194,26 @@ export const profileHandler = async (req, res) => {
     if (user.role_id === 2) role = "partner";
     if (user.role_id === 3) role = "admin";
 
+    let city = "";
+    if (role === "partner") {
+      const partner = await Partner.findOne({
+        where: { user_id },
+        include: [{ model: City, as: 'city' }]
+      });
+      if (partner && partner.city) {
+        city = partner.city.name;
+      }
+    }
+
     return res.json({
+      id: user.id,
       role,
       name: user.name,
       email: user.email,
       number: user.mob_no,
-      status: user.status
+      status: user.status,
+      city: city || undefined,
+      district: city || undefined
     });
   } catch (err) {
     return res.status(404).json({ message: err.message || "User not found" });

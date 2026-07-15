@@ -1,19 +1,12 @@
-import Broker from "../models/broker.model.js";
 import Client from "../models/client.model.js";
 import Lead from "../models/lead.model.js";
 
-// ----------------- GETTING CLIENT DETAILS OF THE BROKER(INDIVIDUAL) -----------------
+// ----------------- GETTING CLIENT DETAILS OF THE PARTNER(INDIVIDUAL) -----------------
 export const getReferredClients = async (req, res) => {
   try {
-    const id = req.user.id || req.user._id; // Accommodate JWT payload during transition
-    const broker = await Broker.findByPk(id);
-
-    if (!broker || !broker.brokerId) {
-      return res.status(404).json({ message: "Broker not found" });
-    }
-    const brokerid = broker.brokerId;
+    const id = req.user.id || req.user._id;
     const clients = await Client.findAll({
-      where: { broker_id: brokerid },
+      where: { broker_id: String(id) },
       attributes: { exclude: ['password'] }
     });
 
@@ -22,26 +15,18 @@ export const getReferredClients = async (req, res) => {
       clients,
     });
   } catch (err) {
-    console.error("Get broker clients error:", err);
+    console.error("Get partner clients error:", err);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
 
-// ----------------- GETTING LEADS DATA OF BROKER(INDIVIDUAL) -----------------
+// ----------------- GETTING LEADS DATA OF PARTNER(INDIVIDUAL) -----------------
 export const getBrokerLeads = async (req, res) => {
   try {
     const id = req.user.id || req.user._id;
-
-    const broker = await Broker.findByPk(id);
-
-    if (!broker || !broker.brokerId) {
-      return res.status(404).json({ message: "Broker not found" });
-    };
-
-    const brokerid = broker.brokerId;
     const leads = await Lead.findAll({
-      where: { broker_id: brokerid },
+      where: { broker_id: String(id) },
       order: [['createdAt', 'DESC']]
     });
 
@@ -61,7 +46,7 @@ export const getBrokerLeads = async (req, res) => {
       leads: Leads
     });
   } catch (err) {
-    console.error("Get broker leads error:", err);
+    console.error("Get partner leads error:", err);
     return res.status(500).json({ message: "Internal server error" });
   }
 };

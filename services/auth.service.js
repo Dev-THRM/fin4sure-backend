@@ -7,6 +7,9 @@ import { signAccessToken } from "../utils/jwt.utlis.js";
 
 import UserInit from "../models/user.js";
 import OtpVerificationInit from "../models/otp_verification.js";
+import City from "../models/city.model.js";
+import Partner from "../models/partner.model.js";
+import Client from "../models/client.model.js";
 
 const User = UserInit(sequelize, DataTypes);
 const OtpVerification = OtpVerificationInit(sequelize, DataTypes);
@@ -14,7 +17,7 @@ const OtpVerification = OtpVerificationInit(sequelize, DataTypes);
 const OTP_EXPIRY_TIME = 5 * 60 * 1000; 
 
 export const signUpService = async (data) => {
-  const { name, email, number, password, role_id } = data;
+  const { name, email, number, password, role_id, dob, address, state, district, pincode, city } = data;
 
   const normalizedEmail = email.toLowerCase().trim();
 
@@ -38,6 +41,35 @@ export const signUpService = async (data) => {
     role_id,
     status: 'active'
   });
+
+  if (role_id === 2) {
+    // Partner / Broker role
+    const cityName = (city || district || address || "Mumbai").trim();
+    const [cityObj] = await City.findOrCreate({
+      where: { name: cityName },
+      defaults: {
+        city_id: "CTY" + Math.floor(100000 + Math.random() * 900000)
+      }
+    });
+    await Partner.create({
+      user_id: newUser.id,
+      city_id: cityObj.id
+    });
+  } else if (role_id === 1) {
+    // Borrower / Client role
+    await Client.create({
+      id: newUser.id,
+      name,
+      email: normalizedEmail,
+      number,
+      password: password, // hooks will hash it
+      dob: dob || null,
+      address: address || null,
+      pincode: pincode || null,
+      state: state || null,
+      district: district || null,
+    });
+  }
 
   return newUser;
 };

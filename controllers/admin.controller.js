@@ -1,8 +1,50 @@
 import Client from "../models/client.model.js";
 import Lead from "../models/lead.model.js";
-import Broker from "../models/broker.model.js";
+import Partner from "../models/partner.model.js";
+import City from "../models/city.model.js";
 import Admin from "../models/admin.model.js";
 import ExcelJS from "exceljs";
+import { sequelize } from "../config/db.js";
+import { DataTypes } from "sequelize";
+import UserInit from "../models/user.js";
+
+const User = UserInit(sequelize, DataTypes);
+
+const getBrokersList = async () => {
+  const users = await User.findAll({
+    where: { role_id: 2 },
+    attributes: { exclude: ['password_hash'] },
+    raw: true
+  });
+
+  return await Promise.all(
+    users.map(async (user) => {
+      const partner = await Partner.findOne({
+        where: { user_id: user.id },
+        include: [{ model: City, as: 'city' }]
+      });
+      const cityName = partner && partner.city ? partner.city.name : "";
+
+      return {
+        id: user.id,
+        brokerId: String(user.id),
+        name: user.name,
+        email: user.email,
+        number: user.mob_no,
+        status: user.status === 'active' ? 'approved' : 'pending',
+        dob: "1990-01-01",
+        address: cityName,
+        state: "India",
+        district: cityName,
+        pincode: "000000",
+        clients: [],
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        statusUpdatedAt: user.updatedAt
+      };
+    })
+  );
+};
 
 /* -----------------------------------------------------
    ADMIN STATS
@@ -10,10 +52,10 @@ import ExcelJS from "exceljs";
 export const userCount = async (req, res) => {
   try {
     const totalClients = await Client.count();
-    const totalBrokers = await Broker.count();
+    const totalBrokers = await User.count({ where: { role_id: 2 } });
 
-    const approvedBrokers = await Broker.count({ where: { status: "approved" } });
-    const pendingBrokers = await Broker.count({ where: { status: "pending" } });
+    const approvedBrokers = await User.count({ where: { role_id: 2, status: "active" } });
+    const pendingBrokers = await User.count({ where: { role_id: 2, status: "pending verification" } });
     const pendingLeads = await Lead.count({ where: { status: "pending" } });
 
     res.json({
@@ -34,10 +76,7 @@ export const userCount = async (req, res) => {
 ----------------------------------------------------- */
 export const brokersWithFullData = async (req, res) => {
   try {
-    const brokers = await Broker.findAll({
-      attributes: { exclude: ['password', 'createdAt', 'updatedAt'] },
-      raw: true
-    });
+    const brokers = await getBrokersList();
 
     const result = await Promise.all(
       brokers.map(async (broker) => {
@@ -88,10 +127,17 @@ export const allLeads = async (req, res) => {
         let broker = null;
 
         if (lead.broker_id !== "self") {
-          broker = await Broker.findOne({
-            where: { brokerId: lead.broker_id },
-            attributes: ['name', 'brokerId', 'email', 'number']
+          const u = await User.findByPk(Number(lead.broker_id), {
+            attributes: ['id', 'name', 'email', 'mob_no']
           });
+          if (u) {
+            broker = {
+              name: u.name,
+              brokerId: String(u.id),
+              email: u.email,
+              number: u.mob_no
+            };
+          }
         }
 
         return {
@@ -119,21 +165,28 @@ export const updateBrokerStatus = async (req, res) => {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    await Broker.update(
-      { status, statusUpdatedAt: new Date() },
-      { where: { brokerId } }
+    const userStatus = status === "approved" ? "active" : "suspended";
+
+    await User.update(
+      { status: userStatus },
+      { where: { id: Number(brokerId) } }
     );
 
-    const broker = await Broker.findOne({
-      where: { brokerId },
-      attributes: { exclude: ['password'] }
+    const user = await User.findByPk(Number(brokerId), {
+      attributes: ['id', 'name', 'email', 'mob_no', 'status']
     });
 
-    if (!broker) {
+    if (!user) {
       return res.status(404).json({ message: "Broker not found" });
     }
 
-    res.json(broker);
+    res.json({
+      brokerId: String(user.id),
+      name: user.name,
+      email: user.email,
+      number: user.mob_no,
+      status: user.status === "active" ? "approved" : "rejected"
+    });
   } catch (e) {
     res.status(500).json({ message: "Failed to update broker status" });
   }
@@ -205,7 +258,7 @@ export const exportData = async (req, res) => {
     
     // -------------------- broker --------------------
     if (type === "brokers") {
-    const data_b = await Broker.findAll({ raw: true });
+    const data_b = await getBrokersList();
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Report");
 
@@ -339,7 +392,7 @@ export const exportData = async (req, res) => {
     }
     if(type === "All") {
     const data_c = await Lead.findAll({ raw: true });
-    const data_b = await Broker.findAll({ raw: true });
+    const data_b = await getBrokersList();
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Report");
