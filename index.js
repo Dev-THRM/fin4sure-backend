@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
 import connectDB, { sequelize } from "./config/db.js";
-import authRouter from "./routes/auth.routes.js"; // ADD THIS
+import authRouter from "./routes/auth.routes.js";
 import adminRouter from "./routes/admin.routes.js";
 import brokerRouter from "./routes/broker.routes.js";
 import clientRouter from "./routes/client.routes.js";
@@ -28,7 +28,6 @@ import './models/loan_application.js';
 import './models/status.js';
 import { setupAssociations } from './models/associations.js';
 
-
 const app = express();
 
 app.use(
@@ -43,7 +42,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 // Routes
-app.use("/api/auth", authRouter); // ADD THIS
+app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/broker", brokerRouter);
 app.use("/api/client", clientRouter);
@@ -56,10 +55,9 @@ const startServer = async () => {
   try {
     await connectDB();
     
-    // Sync models
     setupAssociations();
-    await sequelize.sync({ alter: true });
-    console.log("Database synced");
+    await sequelize.authenticate(); // We do not use sync({alter: true}) to avoid the 64 keys bug.
+    console.log("Database connected successfully");
 
     app.listen(PORT, () => {
       console.log(`Server is running on PORT ${PORT}`);
