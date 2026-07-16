@@ -2,9 +2,8 @@
 import { verifyToken } from "../utils/jwt.utlis.js";
 import { sequelize } from "../config/db.js";
 import { DataTypes } from "sequelize";
-import UserInit from "../models/user.js";
+import User from "../models/user.js";
 
-const User = UserInit(sequelize, DataTypes);
 // ---------------------------------------------------------------------------
 
 export const verifyUser = async (req, res, next) => {
