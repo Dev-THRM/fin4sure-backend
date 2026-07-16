@@ -11,7 +11,9 @@ import Pincode from "../models/pincode.js";
 import Loan_Application from "../models/loan_application.js";
 import Loan_type from "../models/loan_type.js";
 import Lender_Loan_Rates from "../models/lender_loan_rates.js";
-import City from "../models/city.model.js";
+import City from "../models/city.js";
+import State from "../models/state.js";
+import District from "../models/district.js";
 import Partner from "../models/partner.model.js";
 import Client from "../models/client.model.js";
 
@@ -47,13 +49,29 @@ export const signUpService = async (data) => {
 
   if (role_id === 2) {
     // Partner / Broker role
-    const cityName = (city || district || address || "Mumbai").trim();
+    const cityName = (city || "Mumbai").trim();
+    const districtName = (district || "Mumbai City").trim();
+    const stateName = (state || "Maharashtra").trim();
+
+    // 1. Find or create State
+    const [stateObj] = await State.findOrCreate({
+      where: { name: stateName },
+      defaults: { country: "India" }
+    });
+
+    // 2. Find or create District
+    const [districtObj] = await District.findOrCreate({
+      where: { name: districtName },
+      defaults: { state_id: stateObj.id }
+    });
+
+    // 3. Find or create City
     const [cityObj] = await City.findOrCreate({
       where: { name: cityName },
-      defaults: {
-        city_id: "CTY" + Math.floor(100000 + Math.random() * 900000)
-      }
+      defaults: { district_id: districtObj.id }
     });
+
+    // 4. Create Partner
     await Partner.create({
       user_id: newUser.id,
       city_id: cityObj.id
