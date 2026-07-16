@@ -50,4 +50,8 @@ export const setupAssociations = () => {
 
   Status.hasMany(Loan_Application, { foreignKey: 'status_id' });
   Loan_Application.belongsTo(Status, { foreignKey: 'status_id' });
+
+  // Explicit alias for Loan_Application → Loan_type (used in broker referral queries)
+  Loan_Application.belongsTo(Loan_type, { foreignKey: 'loan_type_id', as: 'loanType' });
+  Loan_type.hasMany(Loan_Application, { foreignKey: 'loan_type_id', as: 'applications' });
 };
