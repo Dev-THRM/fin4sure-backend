@@ -1,14 +1,11 @@
 import Client from "../models/client.model.js";
 import Lead from "../models/lead.model.js";
 import Partner from "../models/partner.model.js";
-import City from "../models/city.model.js";
+import City from "../models/city.js";
 import Admin from "../models/admin.model.js";
 import ExcelJS from "exceljs";
 import { sequelize } from "../config/db.js";
-import { DataTypes } from "sequelize";
-import UserInit from "../models/user.js";
-
-const User = UserInit(sequelize, DataTypes);
+import User from "../models/user.js";
 
 const getBrokersList = async () => {
   const users = await User.findAll({
