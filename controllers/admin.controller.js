@@ -6,9 +6,9 @@ import Admin from "../models/admin.model.js";
 import ExcelJS from "exceljs";
 import { sequelize } from "../config/db.js";
 import { DataTypes } from "sequelize";
-import UserInit from "../models/user.js";
+import User from "../models/user.js";
 
-const User = UserInit(sequelize, DataTypes);
+//const User = UserInit(sequelize, DataTypes);
 
 const getBrokersList = async () => {
   const users = await User.findAll({
