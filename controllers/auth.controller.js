@@ -4,7 +4,8 @@ import {
   verifyOTPService,
   loginService,
   profileService,
-  profileUpdateService
+  profileUpdateService,
+  registerBorrowerService
 } from "../services/auth.service.js";
 
 export const signUpHandler = async (req, res) => {
@@ -24,6 +25,39 @@ export const signUpHandler = async (req, res) => {
     return res.json({ redirect: "/login" });
   } catch (err) {
     console.error("Signup error:", err);
+    if (err.message === "User already exists") {
+      return res.status(409).json({ message: err.message });
+    }
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const registerBorrowerHandler = async (req, res) => {
+  try {
+    const { name, email, number, dob, gender, address, pincode, password, loanAmount, tenure, loanPurpose, loanType, selectedLenders } = req.body;
+
+    if (!name || !email || !number || !dob || !gender || !address || !pincode || !password || !loanAmount || !tenure || !loanPurpose || !loanType || !selectedLenders || selectedLenders.length === 0) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    const { user, borrower, accessToken } = await registerBorrowerService(req.body);
+
+    return res
+      .cookie("AccessToken", accessToken, {
+        httpOnly: true,
+        secure: false,
+        sameSite: "lax",
+        maxAge: 24 * 60 * 60 * 1000,
+      })
+      .json({
+        message: "Borrower created successfully",
+        _id: user.id,
+        name: user.name,
+        email: user.email,
+        role: "borrower",
+      });
+  } catch (err) {
+    console.error("Register Borrower error:", err);
     if (err.message === "User already exists") {
       return res.status(409).json({ message: err.message });
     }
