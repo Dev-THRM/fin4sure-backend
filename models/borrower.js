@@ -1,28 +1,33 @@
-'use strict';
-const {
-  Model
-} = require('sequelize');
-module.exports = (sequelize, DataTypes) => {
-  class Borrower extends Model {
-    /**
-     * Helper method for defining associations.
-     * This method is not a part of Sequelize lifecycle.
-     * The `models/index` file will call this method automatically.
-     */
-    static associate(models) {
-      // define association here
-    }
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/db.js';
+
+const Borrower = sequelize.define('Borrower', {
+  user_id: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+  dob: {
+    type: DataTypes.DATE,
+    allowNull: false
+  },
+  gender: {
+    type: DataTypes.ENUM('male', 'female', 'other'),
+    allowNull: false
+  },
+  address: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  pincode_id: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+  profile_status: {
+    type: DataTypes.ENUM('Completed', 'Incomplete', 'Under Review', 'Rejected'),
+    allowNull: false
   }
-  Borrower.init({
-    user_id: DataTypes.INTEGER,
-    dob: DataTypes.DATE,
-    gender: DataTypes.ENUM('male', 'female', 'other'),
-    address: DataTypes.STRING,
-    pincode_id: DataTypes.INTEGER,
-    profile_status: DataTypes.ENUM('Completed', 'Incomplete', 'Under Review', 'Rejected')
-  }, {
-    sequelize,
-    modelName: 'Borrower',
-  });
-  return Borrower;
-};
+}, {
+  timestamps: true,
+});
+
+export default Borrower;
