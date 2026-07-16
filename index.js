@@ -14,7 +14,6 @@ import cors from "cors";
 // Import models to ensure they are registered with Sequelize before sync
 import './models/admin.model.js';
 import './models/bank.model.js';
-import './models/city.model.js';
 import './models/partner.model.js';
 import './models/client.model.js';
 import './models/lead.model.js';
@@ -25,6 +24,8 @@ import './models/state.js';
 import './models/district.js';
 import './models/city.js';
 import './models/pincode.js';
+import './models/loan_application.js';
+import './models/status.js';
 import { setupAssociations } from './models/associations.js';
 
 
@@ -55,13 +56,6 @@ const startServer = async () => {
   try {
     await connectDB();
     
-    // Drop old tables if they exist to force clean schema recreation
-    await sequelize.query("SET FOREIGN_KEY_CHECKS = 0;").catch(() => {});
-    await sequelize.query("DROP TABLE IF EXISTS `partners`;").catch(() => {});
-    await sequelize.query("DROP TABLE IF EXISTS `cities`;").catch(() => {});
-    await sequelize.query("DROP TABLE IF EXISTS `Brokers`;").catch(() => {});
-    await sequelize.query("SET FOREIGN_KEY_CHECKS = 1;").catch(() => {});
-
     // Sync models
     setupAssociations();
     await sequelize.sync({ alter: true });

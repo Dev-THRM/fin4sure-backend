@@ -9,7 +9,7 @@ import {
 } from "../services/auth.service.js";
 import { signAccessToken } from "../utils/jwt.utlis.js";
 import Partner from "../models/partner.model.js";
-import City from "../models/city.model.js";
+import City from "../models/city.js";
 
 export const signUpHandler = async (req, res) => {
   try {
