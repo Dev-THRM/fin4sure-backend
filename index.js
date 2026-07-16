@@ -20,6 +20,12 @@ import './models/client.model.js';
 import './models/lead.model.js';
 import './models/lender.js';
 import './models/loan_type.js';
+import './models/lender_loan_rates.js';
+import './models/state.js';
+import './models/district.js';
+import './models/city.js';
+import './models/pincode.js';
+import { setupAssociations } from './models/associations.js';
 
 
 const app = express();
@@ -57,6 +63,7 @@ const startServer = async () => {
     await sequelize.query("SET FOREIGN_KEY_CHECKS = 1;").catch(() => {});
 
     // Sync models
+    setupAssociations();
     await sequelize.sync({ alter: true });
     console.log("Database synced");
 

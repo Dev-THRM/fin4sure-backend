@@ -1,0 +1,39 @@
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/db.js';
+
+const Lender_Loan_Rates = sequelize.define('Lender_Loan_Rates', {
+  lender_id: {
+    type: DataTypes.INTEGER,
+  },
+  loan_type_id: {
+    type: DataTypes.INTEGER,
+  },
+  rate_type: {
+    type: DataTypes.ENUM('floating', 'fixed'),
+  },
+  min_rate: {
+    type: DataTypes.DOUBLE,
+  },
+  max_rate: {
+    type: DataTypes.DOUBLE,
+  },
+  processing_fee: {
+    type: DataTypes.DOUBLE,
+  },
+  max_tenure: {
+    type: DataTypes.INTEGER,
+  },
+  max_amount: {
+    type: DataTypes.DOUBLE,
+  },
+  offer: {
+    type: DataTypes.STRING,
+  },
+  effective_from: {
+    type: DataTypes.DATE,
+  }
+}, {
+  timestamps: true,
+});
+
+export default Lender_Loan_Rates;

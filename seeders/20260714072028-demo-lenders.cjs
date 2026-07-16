@@ -3,23 +3,16 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
+    // 1. Insert Lenders
     await queryInterface.bulkInsert('Lenders', [
       {
         name: 'State Bank of India',
         short: 'SBI',
         type: 'psu',
-        emoji: '🏛️',
-        color: '#003399',
         url: 'https://sbi.co.in',
-        rates: JSON.stringify({
-          home: {f: [7.10, 9.65], x: [8.70, 11.20]},
-          lap: {f: [8.55, 11.05], x: [9.55, 12.05]},
-          personal: {f: null, x: [11.45, 14.80]},
-          business: {f: [10.75, 13.05], x: [12.05, 15.05]},
-          vehicle: {f: [8.75, 10.25], x: [9.25, 11.05]}
-        }),
         tc: 'Linked to EBLR. Women borrowers get 5 bps concession. Zero prepayment on floating loans.',
         offer: '🎁 Zero PF on home loans for women (festive offer — verify at branch)',
+        logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/5/58/State_Bank_of_India_logo.svg/200px-State_Bank_of_India_logo.svg.png',
         createdAt: new Date(),
         updatedAt: new Date()
       },
@@ -27,18 +20,10 @@ module.exports = {
         name: 'HDFC Bank',
         short: 'HDFC',
         type: 'private',
-        emoji: '🏦',
-        color: '#004c8f',
         url: 'https://hdfcbank.com',
-        rates: JSON.stringify({
-          home: {f: [8.50, 9.90], x: [9.00, 11.50]},
-          lap: {f: [9.00, 11.50], x: [10.00, 12.50]},
-          personal: {f: null, x: [10.50, 21.00]},
-          business: {f: null, x: [15.00, 20.00]},
-          vehicle: {f: [8.90, 10.50], x: null}
-        }),
         tc: 'Rates are linked to Repo Rate. Foreclosure charges apply as per terms.',
         offer: '🎉 50% off on processing fees for salaried professionals.',
+        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/HDFC_Bank_Logo.svg/200px-HDFC_Bank_Logo.svg.png',
         createdAt: new Date(),
         updatedAt: new Date()
       },
@@ -46,25 +31,82 @@ module.exports = {
         name: 'ICICI Bank',
         short: 'ICICI',
         type: 'private',
-        emoji: '🏦',
-        color: '#f05a22',
         url: 'https://icicibank.com',
-        rates: JSON.stringify({
-          home: {f: [8.75, 10.05], x: [9.25, 11.60]},
-          lap: {f: [9.10, 11.60], x: [10.10, 12.60]},
-          personal: {f: null, x: [10.75, 19.00]},
-          business: {f: null, x: [14.00, 19.50]},
-          vehicle: {f: [9.00, 10.75], x: null}
-        }),
         tc: 'Rates subject to credit score and loan amount. Prepayment allowed after 1 year.',
         offer: '⚡ Instant approval for pre-approved salary account holders.',
+        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/ICICI_Bank_Logo.svg/200px-ICICI_Bank_Logo.svg.png',
         createdAt: new Date(),
         updatedAt: new Date()
       }
     ], {});
+
+    // 2. Fetch IDs
+    const [lenders] = await queryInterface.sequelize.query(`SELECT id, short FROM Lenders;`);
+    const [loanTypes] = await queryInterface.sequelize.query(`SELECT id, short_id FROM Loan_types;`);
+    
+    const lenderMap = {};
+    lenders.forEach(l => lenderMap[l.short] = l.id);
+    
+    const typeMap = {};
+    loanTypes.forEach(lt => typeMap[lt.short_id] = lt.id);
+
+    // 3. Construct Rates Array
+    const ratesToInsert = [];
+    
+    const addRate = (lenderShort, typeShort, rateType, min, max) => {
+      if (!lenderMap[lenderShort] || !typeMap[typeShort] || !min) return;
+      ratesToInsert.push({
+        lender_id: lenderMap[lenderShort],
+        loan_type_id: typeMap[typeShort],
+        rate_type: rateType,
+        min_rate: min,
+        max_rate: max || min, // Fallback if max isn't provided
+        processing_fee: 0,
+        max_tenure: 360,
+        max_amount: 50000000,
+        offer: null,
+        effective_from: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+    };
+
+    // SBI Rates
+    addRate('SBI', 'home', 'floating', 7.10, 9.65);
+    addRate('SBI', 'home', 'fixed', 8.70, 11.20);
+    addRate('SBI', 'lap', 'floating', 8.55, 11.05);
+    addRate('SBI', 'lap', 'fixed', 9.55, 12.05);
+    addRate('SBI', 'personal', 'fixed', 11.45, 14.80);
+    addRate('SBI', 'business', 'floating', 10.75, 13.05);
+    addRate('SBI', 'business', 'fixed', 12.05, 15.05);
+    addRate('SBI', 'vehicle', 'floating', 8.75, 10.25);
+    addRate('SBI', 'vehicle', 'fixed', 9.25, 11.05);
+
+    // HDFC Rates
+    addRate('HDFC', 'home', 'floating', 8.50, 9.90);
+    addRate('HDFC', 'home', 'fixed', 9.00, 11.50);
+    addRate('HDFC', 'lap', 'floating', 9.00, 11.50);
+    addRate('HDFC', 'lap', 'fixed', 10.00, 12.50);
+    addRate('HDFC', 'personal', 'fixed', 10.50, 21.00);
+    addRate('HDFC', 'business', 'fixed', 15.00, 20.00);
+    addRate('HDFC', 'vehicle', 'floating', 8.90, 10.50);
+
+    // ICICI Rates
+    addRate('ICICI', 'home', 'floating', 8.75, 10.05);
+    addRate('ICICI', 'home', 'fixed', 9.25, 11.60);
+    addRate('ICICI', 'lap', 'floating', 9.10, 11.60);
+    addRate('ICICI', 'lap', 'fixed', 10.10, 12.60);
+    addRate('ICICI', 'personal', 'fixed', 10.75, 19.00);
+    addRate('ICICI', 'business', 'fixed', 14.00, 19.50);
+    addRate('ICICI', 'vehicle', 'floating', 9.00, 10.75);
+
+    if (ratesToInsert.length > 0) {
+      await queryInterface.bulkInsert('Lender_Loan_Rates', ratesToInsert, {});
+    }
   },
 
   async down (queryInterface, Sequelize) {
+    await queryInterface.bulkDelete('Lender_Loan_Rates', null, {});
     await queryInterface.bulkDelete('Lenders', null, {});
   }
 };

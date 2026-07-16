@@ -2,33 +2,36 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('Lenders', {
+    await queryInterface.createTable('Loan_Applications', {
       id: {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
         type: Sequelize.INTEGER
       },
-      name: {
+      application_no: {
+        type: Sequelize.INTEGER
+      },
+      user_id: {
+        type: Sequelize.INTEGER
+      },
+      lender_id: {
+        type: Sequelize.INTEGER
+      },
+      loan_type_id: {
+        type: Sequelize.INTEGER
+      },
+      loan_amount: {
+        type: Sequelize.DOUBLE
+      },
+      loan_purpose: {
         type: Sequelize.STRING
       },
-      short: {
-        type: Sequelize.STRING
+      tenure: {
+        type: Sequelize.INTEGER
       },
-      type: {
-        type: Sequelize.STRING
-      },
-      url: {
-        type: Sequelize.STRING
-      },
-      tc: {
-        type: Sequelize.TEXT
-      },
-      offer: {
-        type: Sequelize.TEXT
-      },
-      logo: {
-        type: Sequelize.STRING
+      status_id: {
+        type: Sequelize.INTEGER
       },
       createdAt: {
         allowNull: false,
@@ -41,6 +44,6 @@ module.exports = {
     });
   },
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable('Lenders');
+    await queryInterface.dropTable('Loan_Applications');
   }
 };

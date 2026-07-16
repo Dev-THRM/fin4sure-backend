@@ -2,33 +2,26 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('Lenders', {
+    await queryInterface.createTable('Pincodes', {
       id: {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
         type: Sequelize.INTEGER
       },
-      name: {
-        type: Sequelize.STRING
+      code: {
+        type: Sequelize.STRING,
+        allowNull: false
       },
-      short: {
-        type: Sequelize.STRING
-      },
-      type: {
-        type: Sequelize.STRING
-      },
-      url: {
-        type: Sequelize.STRING
-      },
-      tc: {
-        type: Sequelize.TEXT
-      },
-      offer: {
-        type: Sequelize.TEXT
-      },
-      logo: {
-        type: Sequelize.STRING
+      city_id: {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        references: {
+          model: 'Cities',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE'
       },
       createdAt: {
         allowNull: false,
@@ -41,6 +34,6 @@ module.exports = {
     });
   },
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable('Lenders');
+    await queryInterface.dropTable('Pincodes');
   }
 };
