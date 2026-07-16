@@ -8,6 +8,8 @@ import Pincode from './pincode.js';
 import Borrower from './borrower.js';
 import User from './user.js';
 import Role from './role.js';
+import Loan_Application from './loan_application.js';
+import Status from './status.js';
 
 // Setup Associations
 export const setupAssociations = () => {
@@ -31,4 +33,21 @@ export const setupAssociations = () => {
 
   User.belongsTo(Role, { foreignKey: 'role_id'});
   Role.hasMany(User, {foreignKey: 'role_id'});
+
+  // Borrower to User Association
+  Borrower.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+  User.hasOne(Borrower, { foreignKey: 'user_id', as: 'borrower' });
+
+  // Loan_Application Associations
+  User.hasMany(Loan_Application, { foreignKey: 'user_id' });
+  Loan_Application.belongsTo(User, { foreignKey: 'user_id' });
+
+  Lender.hasMany(Loan_Application, { foreignKey: 'lender_id' });
+  Loan_Application.belongsTo(Lender, { foreignKey: 'lender_id' });
+
+  Loan_type.hasMany(Loan_Application, { foreignKey: 'loan_type_id' });
+  Loan_Application.belongsTo(Loan_type, { foreignKey: 'loan_type_id' });
+
+  Status.hasMany(Loan_Application, { foreignKey: 'status_id' });
+  Loan_Application.belongsTo(Status, { foreignKey: 'status_id' });
 };
