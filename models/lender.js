@@ -11,17 +11,8 @@ const Lender = sequelize.define('Lender', {
   type: {
     type: DataTypes.STRING,
   },
-  emoji: {
-    type: DataTypes.STRING,
-  },
-  color: {
-    type: DataTypes.STRING,
-  },
   url: {
     type: DataTypes.STRING,
-  },
-  rates: {
-    type: DataTypes.JSON,
   },
   tc: {
     type: DataTypes.TEXT,
@@ -29,6 +20,9 @@ const Lender = sequelize.define('Lender', {
   offer: {
     type: DataTypes.TEXT,
   },
+  logo: {
+    type: DataTypes.STRING
+  }
 }, {
   timestamps: true,
 });

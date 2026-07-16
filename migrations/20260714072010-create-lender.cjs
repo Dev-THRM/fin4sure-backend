@@ -18,23 +18,17 @@ module.exports = {
       type: {
         type: Sequelize.STRING
       },
-      emoji: {
-        type: Sequelize.STRING
-      },
-      color: {
-        type: Sequelize.STRING
-      },
       url: {
         type: Sequelize.STRING
-      },
-      rates: {
-        type: Sequelize.JSON
       },
       tc: {
         type: Sequelize.TEXT
       },
       offer: {
         type: Sequelize.TEXT
+      },
+      logo: {
+        type: Sequelize.STRING
       },
       createdAt: {
         allowNull: false,
