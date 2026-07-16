@@ -1,6 +1,6 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/db.js';
-import City from './city.model.js';
+import City from './city.js';
 
 const Partner = sequelize.define('Partner', {
   id: {
@@ -21,7 +21,7 @@ const Partner = sequelize.define('Partner', {
   city_id: {
     type: DataTypes.INTEGER,
     references: {
-      model: 'cities',
+      model: 'Cities',
       key: 'id',
     },
     onDelete: 'SET NULL',
