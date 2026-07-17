@@ -15,7 +15,7 @@ import cors from "cors";
 import './models/admin.model.js';
 import './models/bank.model.js';
 import './models/partner.model.js';
-import './models/client.model.js';
+
 import './models/lead.model.js';
 import './models/lender.js';
 import './models/loan_type.js';
@@ -34,7 +34,17 @@ const app = express();
 
 app.use(
   cors({
-    origin: ["https://fin4sure-frontend.vercel.app", "http://localhost:5173"],
+    origin: function (origin, callback) {
+      const allowed = [
+        "http://localhost:5173",
+      ];
+      // Allow all vercel.app deployments (production + previews)
+      if (!origin || allowed.includes(origin) || /\.vercel\.app$/.test(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     methods: ["GET", "PATCH", "POST", "PUT", "DELETE"],
     credentials: true,
   })
