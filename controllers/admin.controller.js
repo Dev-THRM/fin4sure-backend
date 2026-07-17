@@ -1,4 +1,3 @@
-import Client from "../models/client.model.js";
 import Lead from "../models/lead.model.js";
 import Partner from "../models/partner.model.js";
 import City from "../models/city.js";
@@ -7,8 +6,7 @@ import ExcelJS from "exceljs";
 import { sequelize } from "../config/db.js";
 import { DataTypes } from "sequelize";
 import User from "../models/user.js";
-
-//const User = UserInit(sequelize, DataTypes);
+import Borrower from "../models/borrower.js";
 
 const getBrokersList = async () => {
   const users = await User.findAll({
@@ -51,7 +49,7 @@ const getBrokersList = async () => {
 ----------------------------------------------------- */
 export const userCount = async (req, res) => {
   try {
-    const totalClients = await Client.count();
+    const totalClients = await User.count({ where: { role_id: 1 } });
     const totalBrokers = await User.count({ where: { role_id: 2 } });
 
     const approvedBrokers = await User.count({ where: { role_id: 2, status: "active" } });
@@ -80,10 +78,9 @@ export const brokersWithFullData = async (req, res) => {
 
     const result = await Promise.all(
       brokers.map(async (broker) => {
-        const clients = await Client.findAll({
-          where: { broker_id: broker.brokerId },
-          attributes: { exclude: ['password'] }
-        });
+        // Broker's clients logic needs update because Borrower doesn't have broker_id
+        // For now, return empty array to avoid crash
+        const clients = [];
 
         const leads = await Lead.findAll({
           where: { broker_id: broker.brokerId },

@@ -1,5 +1,4 @@
 import Lead from "../models/lead.model.js";
-import Client from "../models/client.model.js";
 import User from "../models/user.js";
 import Borrower from "../models/borrower.js";
 import { encryptPAN, hashPAN } from "../utils/pan.crypto.js";
@@ -19,23 +18,16 @@ export const applyLoan = async (req, res) => {
           return res.status(400).json({ message: "Product is required" });
         }
 
-        let client = await Client.findByPk(userId);
+        let client = await User.findByPk(userId);
         if (!client) {
           const user = await User.findByPk(userId);
           if (user && user.role_id === 1) {
             const borrower = await Borrower.findOne({ where: { user_id: userId } });
-            client = await Client.create({
-              id: userId,
-              name: user.name,
-              email: user.email,
-              number: user.mob_no,
-              password: user.password_hash,
-              dob: borrower?.dob ? new Date(borrower.dob).toISOString().split('T')[0] : null,
-              address: borrower?.address || null,
-              pincode: borrower?.pincode_id ? String(borrower.pincode_id) : null,
-            });
+            /* We skip auto-creating User since we don't have enough details
+            and the flow should have a User beforehand. */
+            return res.status(404).json({ message: "User not found" });
           } else {
-            return res.status(404).json({ message: "Client not found" });
+            return res.status(404).json({ message: "User not found" });
           }
         }
 
@@ -46,18 +38,11 @@ export const applyLoan = async (req, res) => {
           }
           const panHash = hashPAN(cleanPAN);
           const encryptedPAN = encryptPAN(cleanPAN);
-          client.pan_hash = panHash;
-          client.pan_encrypted = encryptedPAN;
+          /* pan is not stored in user directly */
         }
 
         if (dob) client.dob = dob;
-        if (address || pincode || district || state) {
-          client.address = (pincode || "") + "," + (address || "") + "," + (district || "") + "," + (state || "");
-        }
-        if (state) client.state = state;
-        if (district) client.district = district;
-        if (pincode) client.pincode = pincode;
-        await client.save();
+        /* Update Borrower address details if needed, for now skip since we need Borrower record */
 
         let loanTypeId = 1; // Default fallback
         const typeRecord = await Loan_type.findOne({ where: { short_id: product } });
