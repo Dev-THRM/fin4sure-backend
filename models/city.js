@@ -11,6 +11,7 @@ const City = sequelize.define('City', {
     allowNull: false
   }
 }, {
+  tableName: 'cities',
   timestamps: true,
 });
 

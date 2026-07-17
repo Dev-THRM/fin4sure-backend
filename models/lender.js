@@ -24,6 +24,7 @@ const Lender = sequelize.define('Lender', {
     type: DataTypes.STRING
   }
 }, {
+  tableName: 'lenders',
   timestamps: true,
 });
 

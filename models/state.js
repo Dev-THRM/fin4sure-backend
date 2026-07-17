@@ -11,6 +11,7 @@ const State = sequelize.define('State', {
     defaultValue: 'India'
   }
 }, {
+  tableName: 'states',
   timestamps: true,
 });
 

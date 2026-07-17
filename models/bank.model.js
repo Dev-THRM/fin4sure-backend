@@ -12,6 +12,7 @@ const Bank = sequelize.define('Bank', {
     defaultValue: []
   },
 }, {
+  tableName: 'banks',
   timestamps: true,
 });
 

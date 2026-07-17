@@ -9,6 +9,7 @@ const User = sequelize.define('User', {
   role_id: DataTypes.INTEGER,
   status: DataTypes.ENUM('active', 'suspended', 'pending verification', 'draft')
 }, {
+  tableName: 'users',
   timestamps: true,
 });
 

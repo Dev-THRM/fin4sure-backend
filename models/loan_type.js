@@ -15,6 +15,7 @@ const Loan_type = sequelize.define('Loan_type', {
     type: DataTypes.STRING,
   }
 }, {
+  tableName: 'loan_types',
   timestamps: true,
 });
 

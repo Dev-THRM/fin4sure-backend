@@ -11,6 +11,7 @@ const Pincode = sequelize.define('Pincode', {
     allowNull: false
   }
 }, {
+  tableName: 'pincodes',
   timestamps: true,
 });
 

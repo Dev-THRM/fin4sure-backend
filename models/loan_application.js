@@ -15,6 +15,7 @@ const Loan_Application = sequelize.define('Loan_Application', {
     allowNull: true,
   },
 }, {
+  tableName: 'loan_applications',
   timestamps: true,
 });
 

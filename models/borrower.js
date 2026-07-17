@@ -27,6 +27,7 @@ const Borrower = sequelize.define('Borrower', {
     allowNull: false
   }
 }, {
+  tableName: 'borrowers',
   timestamps: true,
 });
 

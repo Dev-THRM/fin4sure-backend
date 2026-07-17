@@ -11,6 +11,7 @@ const District = sequelize.define('District', {
     allowNull: false
   }
 }, {
+  tableName: 'districts',
   timestamps: true,
 });
 

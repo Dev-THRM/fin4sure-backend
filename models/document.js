@@ -24,6 +24,7 @@ const Document = sequelize.define('Document', {
     defaultValue: 'pending'
   }
 }, {
+  tableName: 'documents',
   timestamps: true,
 });
 

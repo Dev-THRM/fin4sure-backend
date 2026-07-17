@@ -15,6 +15,7 @@ export default (sequelize, DataTypes) => {
     attempts: DataTypes.INTEGER
   }, {
     sequelize,
+    tableName: 'otp_verifications',
     modelName: 'Otp_Verification',
   });
   return Otp_Verification;

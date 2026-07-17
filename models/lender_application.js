@@ -16,6 +16,7 @@ const Lender_Application = sequelize.define('Lender_Application', {
     defaultValue: 'pending'
   }
 }, {
+  tableName: 'lender_applications',
   timestamps: true,
 });
 

@@ -33,6 +33,7 @@ const Lender_Loan_Rates = sequelize.define('Lender_Loan_Rates', {
     type: DataTypes.DATE,
   }
 }, {
+  tableName: 'lender_loan_rates',
   timestamps: true,
 });
 

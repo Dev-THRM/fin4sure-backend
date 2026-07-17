@@ -26,6 +26,7 @@ const Admin = sequelize.define('Admin', {
     allowNull: false,
   },
 }, {
+  tableName: 'admins',
   timestamps: true,
   hooks: {
     beforeCreate: async (admin) => {
