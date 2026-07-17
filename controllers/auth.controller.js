@@ -50,8 +50,8 @@ export const signUpHandler = async (req, res) => {
     return res
       .cookie("AccessToken", accessToken, {
         httpOnly: true,
-        secure: false,
-        sameSite: "lax",
+        secure: true,
+        sameSite: "none",
         maxAge: 24 * 60 * 60 * 1000,
       })
       .json({
@@ -85,8 +85,8 @@ export const registerBorrowerHandler = async (req, res) => {
     return res
       .cookie("AccessToken", accessToken, {
         httpOnly: true,
-        secure: false,
-        sameSite: "lax",
+        secure: true,
+        sameSite: "none",
         maxAge: 24 * 60 * 60 * 1000,
       })
       .json({
@@ -151,8 +151,8 @@ export const loginHandler = async (req, res) => {
     return res
       .cookie("AccessToken", accessToken, {
         httpOnly: true,
-        secure: false,
-        sameSite: "lax",
+        secure: true,
+        sameSite: "none",
         maxAge: 24 * 60 * 60 * 1000,
       })
       .json({
@@ -179,8 +179,8 @@ export const Logouthandaler = async (req, res) => {
     res
       .clearCookie("AccessToken", {
         httpOnly: true,
-        secure: false,
-        sameSite: "lax",
+        secure: true,
+        sameSite: "none",
       })
       .json({ message: "Logged out successfully" });
   } catch (e) {
