@@ -2,6 +2,7 @@ import express from "express";
 import {
   applyProduct,
   getClientProducts,
+  getMyApplications
 } from "../controllers/client.controller.js";
 import { applyLoan, getMyLeads } from "../controllers/lead.controller.js";
 import { verifyUser, isClient } from "../middlewares/auth.middleware.js";
@@ -17,5 +18,6 @@ router.post("/apply-product", verifyUser, isClient, applyProduct);
 // Loan routes
 router.post("/apply-loan", verifyUser, isClient, applyLoan);
 router.get("/my-leads", verifyUser, isClient, getMyLeads);
+router.get("/my-applications", verifyUser, isClient, getMyApplications);
 
 export default router;
