@@ -15,7 +15,6 @@ import City from "../models/city.js";
 import State from "../models/state.js";
 import District from "../models/district.js";
 import Partner from "../models/partner.model.js";
-import Client from "../models/client.model.js";
 import Lender_Application from "../models/lender_application.js";
 
 const OtpVerification = OtpVerificationInit(sequelize, DataTypes);
@@ -79,18 +78,8 @@ export const signUpService = async (data) => {
     });
   } else if (role_id === 1) {
     // Borrower / Client role
-    await Client.create({
-      id: newUser.id,
-      name,
-      email: normalizedEmail,
-      number,
-      password: password, // hooks will hash it
-      dob: dob || null,
-      address: address || null,
-      pincode: pincode || null,
-      state: state || null,
-      district: district || null,
-    });
+    // The Client table is replaced by the Borrower/User flow
+    // A Borrower profile will be explicitly created later if needed, or we can just leave the User
   }
 
   return newUser;
@@ -117,6 +106,7 @@ export const registerBorrowerService = async (data) => {
   const transaction = await sequelize.transaction();
 
   try {
+    console.log('[STEP 1] Creating user...');
     const newUser = await User.create({
       name,
       email: normalizedEmail,
@@ -127,6 +117,7 @@ export const registerBorrowerService = async (data) => {
     }, { transaction });
 
     // Handle pincode (default to city_id = 1 for now if it doesn't exist)
+    console.log('[STEP 2] Finding/creating pincode...');
     let pincodeRecord = await Pincode.findOne({ where: { code: pincode }, transaction });
     if (!pincodeRecord) {
       pincodeRecord = await Pincode.create({
@@ -135,6 +126,7 @@ export const registerBorrowerService = async (data) => {
       }, { transaction });
     }
 
+    console.log('[STEP 3] Creating borrower...');
     const newBorrower = await Borrower.create({
       user_id: newUser.id,
       dob: new Date(dob),
@@ -142,17 +134,6 @@ export const registerBorrowerService = async (data) => {
       address,
       pincode_id: pincodeRecord.id,
       profile_status: 'Under Review'
-    }, { transaction });
-
-    await Client.create({
-      id: newUser.id,
-      name,
-      email: normalizedEmail,
-      number,
-      password: hashedPassword,
-      dob: dob || null,
-      address: address || null,
-      pincode: pincode || null,
     }, { transaction });
 
     // Attempt to find loan type ID
@@ -164,6 +145,7 @@ export const registerBorrowerService = async (data) => {
       }
     }
 
+    console.log('[STEP 4] Creating loan application...');
     const applicationNo = Math.floor(10000 + Math.random() * 90000);
 
     const newLoanApp = await Loan_Application.create({
