@@ -10,6 +10,9 @@ import User from './user.js';
 import Role from './role.js';
 import Loan_Application from './loan_application.js';
 import Status from './status.js';
+import Partner from './partner.model.js';
+import Lender_Application from './lender_application.js';
+import Document from './document.js';
 
 // Setup Associations
 export const setupAssociations = () => {
@@ -42,12 +45,25 @@ export const setupAssociations = () => {
   User.hasMany(Loan_Application, { foreignKey: 'user_id' });
   Loan_Application.belongsTo(User, { foreignKey: 'user_id' });
 
-  Lender.hasMany(Loan_Application, { foreignKey: 'lender_id' });
-  Loan_Application.belongsTo(Lender, { foreignKey: 'lender_id' });
+  // Removed Lender <-> Loan_Application direct association
+
+  Loan_Application.hasMany(Lender_Application, { foreignKey: 'loan_application_id' });
+  Lender_Application.belongsTo(Loan_Application, { foreignKey: 'loan_application_id' });
+
+  Lender_Loan_Rates.hasMany(Lender_Application, { foreignKey: 'lender_rate_id' });
+  Lender_Application.belongsTo(Lender_Loan_Rates, { foreignKey: 'lender_rate_id', as: 'rate' });
+
+  // Status relationship removed for Lender_Application since it uses ENUM now
 
   Loan_type.hasMany(Loan_Application, { foreignKey: 'loan_type_id' });
   Loan_Application.belongsTo(Loan_type, { foreignKey: 'loan_type_id' });
 
+  Partner.hasMany(Loan_Application, { foreignKey: 'partner_id' });
+  Loan_Application.belongsTo(Partner, { foreignKey: 'partner_id' });
+
   Status.hasMany(Loan_Application, { foreignKey: 'status_id' });
   Loan_Application.belongsTo(Status, { foreignKey: 'status_id' });
+
+  Loan_Application.hasMany(Document, { foreignKey: 'loan_application_id' });
+  Document.belongsTo(Loan_Application, { foreignKey: 'loan_application_id' });
 };
