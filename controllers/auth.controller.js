@@ -9,7 +9,6 @@ import {
 } from "../services/auth.service.js";
 import { signAccessToken } from "../utils/jwt.utlis.js";
 import Partner from "../models/partner.model.js";
-import Client from "../models/client.model.js";
 import City from "../models/city.js";
 
 export const signUpHandler = async (req, res) => {
@@ -98,11 +97,13 @@ export const registerBorrowerHandler = async (req, res) => {
         role: "borrower",
       });
   } catch (err) {
-    console.error("Register Borrower error:", err);
+    console.error("Register Borrower error:", err.message);
+    console.error("Register Borrower SQL error:", err.parent?.message || err.original?.message || "no SQL error");
+    console.error("Register Borrower stack:", err.stack);
     if (err.message === "User already exists") {
       return res.status(409).json({ message: err.message });
     }
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error", error: err.message, sql: err.parent?.message });
   }
 };
 
