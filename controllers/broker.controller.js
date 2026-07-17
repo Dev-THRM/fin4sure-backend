@@ -1,17 +1,16 @@
-import Client from "../models/client.model.js";
 import Lead from "../models/lead.model.js";
 import Loan_Application from "../models/loan_application.js";
 import Partner from "../models/partner.model.js";
 import Loan_type from "../models/loan_type.js";
+import Borrower from "../models/borrower.js";
+import Status from "../models/status.js";
 
 // ----------------- GETTING CLIENT DETAILS OF THE PARTNER(INDIVIDUAL) -----------------
 export const getReferredClients = async (req, res) => {
   try {
     const id = req.user.id || req.user._id;
-    const clients = await Client.findAll({
-      where: { broker_id: String(id) },
-      attributes: { exclude: ['password'] }
-    });
+    // Clients logic needs to be updated since Borrower has no broker_id
+    const clients = [];
 
     return res.json({
       count: clients.length,
@@ -52,11 +51,17 @@ export const getBrokerLeads = async (req, res) => {
     if (partner) {
       const applications = await Loan_Application.findAll({
         where: { partner_id: partner.id },
-        include: [{
-          model: Loan_type,
-          as: 'loanType',
-          attributes: ['id', 'name'],
-        }],
+        include: [
+          {
+            model: Loan_type,
+            as: 'loanType',
+            attributes: ['id', 'name'],
+          },
+          {
+            model: Status,
+            attributes: ['name'],
+          }
+        ],
         order: [['createdAt', 'DESC']],
       });
 
@@ -64,7 +69,7 @@ export const getBrokerLeads = async (req, res) => {
         id: 'app_' + app.id,
         name: app.loan_purpose || 'Client Referral',
         product: app.loanType?.name || 'Loan',
-        status: app.status_id === 2 ? 'approved' : app.status_id === 3 ? 'rejected' : 'pending',
+        status: app.Status?.name?.toLowerCase() || 'applied',
         createdAt: app.createdAt,
         amount: app.loan_amount,
         client_preference: app.client_preference,
