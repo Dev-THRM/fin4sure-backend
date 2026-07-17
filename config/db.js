@@ -20,6 +20,13 @@ const connectDB = async () => {
     } catch (err) {
       // Column already exists or other error, safe to ignore
     }
+
+    try {
+      await sequelize.query("ALTER TABLE loan_applications ADD COLUMN partner_id INT DEFAULT NULL;");
+      console.log("Migration: Added partner_id column");
+    } catch (err) {
+      // Column already exists or other error, safe to ignore
+    }
   } catch (error) {
     console.error(`MySQL connection error: ${error.message}`);
     process.exit(1);
