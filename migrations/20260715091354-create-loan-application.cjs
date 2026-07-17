@@ -33,6 +33,14 @@ module.exports = {
       status_id: {
         type: Sequelize.INTEGER
       },
+      partner_id: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+      },
+      client_preference: {
+        type: Sequelize.ENUM('direct_reach', 'partner_routing'),
+        allowNull: true
+      },
       createdAt: {
         allowNull: false,
         type: Sequelize.DATE
