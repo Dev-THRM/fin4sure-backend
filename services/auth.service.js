@@ -16,6 +16,7 @@ import State from "../models/state.js";
 import District from "../models/district.js";
 import Partner from "../models/partner.model.js";
 import Client from "../models/client.model.js";
+import Lender_Application from "../models/lender_application.js";
 
 const OtpVerification = OtpVerificationInit(sequelize, DataTypes);
 
@@ -143,9 +144,6 @@ export const registerBorrowerService = async (data) => {
       profile_status: 'Under Review'
     }, { transaction });
 
-    // Handle Loan Application
-    let lenderId = selectedLenders && selectedLenders.length > 0 ? selectedLenders[0] : null;
-
     // Attempt to find loan type ID
     let loanTypeId = null;
     if (loanType) {
@@ -155,37 +153,35 @@ export const registerBorrowerService = async (data) => {
       }
     }
 
-    // Attempt to fetch rates if lender and loan type are available
-    let minRate = null;
-    let maxRate = null;
-    let rate = null;
-    if (lenderId && loanTypeId) {
-      const rates = await Lender_Loan_Rates.findOne({
-        where: { lender_id: lenderId, loan_type_id: loanTypeId },
-        transaction
-      });
-      if (rates) {
-        minRate = rates.min_rate;
-        maxRate = rates.max_rate;
-        rate = rates.min_rate; // Can default to min_rate for now
-      }
-    }
-
     const applicationNo = Math.floor(10000 + Math.random() * 90000);
 
     const newLoanApp = await Loan_Application.create({
       application_no: applicationNo,
       user_id: newUser.id,
-      lender_id: lenderId,
       loan_type_id: loanTypeId,
       loan_amount: loanAmount,
       loan_purpose: loanPurpose,
       tenure: tenure,
       status_id: 1, // Default status e.g., 'Under Review'
-      min_rate: minRate,
-      max_rate: maxRate,
-      rate: rate
     }, { transaction });
+
+    // Handle Lender Applications for multiple selected lenders
+    if (selectedLenders && selectedLenders.length > 0 && loanTypeId) {
+      for (const lender of selectedLenders) {
+        const rateObj = await Lender_Loan_Rates.findOne({
+          where: { lender_id: lender, loan_type_id: loanTypeId },
+          transaction
+        });
+
+        if (rateObj) {
+          await Lender_Application.create({
+            loan_application_id: newLoanApp.id,
+            lender_rate_id: rateObj.id,
+            status: 'pending'
+          }, { transaction });
+        }
+      }
+    }
 
     await transaction.commit();
 
@@ -244,6 +240,7 @@ export const sendOTPService = async (number) => {
   //   }
   // );
 
+  console.log(res.data);
   // LOCAL TESTING ONLY: Log the OTP to the console
   console.log(`\n==========================================`);
   console.log(`🔑 LOCAL TESTING OTP FOR ${number}: ${otp} 🔑`);
