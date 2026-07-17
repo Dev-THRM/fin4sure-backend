@@ -9,6 +9,7 @@ import {
 } from "../services/auth.service.js";
 import { signAccessToken } from "../utils/jwt.utlis.js";
 import Partner from "../models/partner.model.js";
+import Client from "../models/client.model.js";
 import City from "../models/city.js";
 
 export const signUpHandler = async (req, res) => {
@@ -187,15 +188,18 @@ export const Logouthandaler = async (req, res) => {
 };
 
 export const sendUpdateNumberOTP = async (req, res) => {
+  console.log("sendUpdateNumberOTP endpoint hit with number:", req.body?.number);
   try {
     const { number } = req.body;
     if (!/^[0-9]{10}$/.test(number)) {
+      console.log("Validation failed: number must be 10 digits");
       return res.status(400).json({ message: "Invalid number" });
     }
-    await sendOTPService(number);
+    const otpRes = await sendOTPService(number);
+    console.log("OTP generated and saved successfully for:", number);
     return res.json({ message: "OTP sent to new number" });
   } catch (err) {
-    console.error(err);
+    console.error("Error in sendUpdateNumberOTP:", err);
     return res.status(500).json({ message: "Failed to send OTP" });
   }
 };
@@ -239,6 +243,20 @@ export const profileHandler = async (req, res) => {
       }
     }
 
+    let clientDetails = {};
+    if (role === "borrower") {
+      const client = await Client.findByPk(user_id);
+      if (client) {
+        clientDetails = {
+          dob: client.dob,
+          address: client.address,
+          pincode: client.pincode,
+          state: client.state,
+          district: client.district,
+        };
+      }
+    }
+
     return res.json({
       id: user.id,
       role,
@@ -247,9 +265,11 @@ export const profileHandler = async (req, res) => {
       number: user.mob_no,
       status: user.status,
       city: city || undefined,
-      district: city || undefined
+      district: city || undefined,
+      ...clientDetails
     });
   } catch (err) {
+    console.error(err);
     return res.status(404).json({ message: err.message || "User not found" });
   }
 };
@@ -261,14 +281,27 @@ export const profileUpdateHandeler = async (req, res) => {
       return res.status(401).json({ message: "Not authenticated" });
     }
     
-    // We expect the payload from req.body to match the new SQL user schema (or map it)
     const updateData = {};
     if (req.body.name) updateData.name = req.body.name;
     if (req.body.email) updateData.email = req.body.email;
     if (req.body.number) updateData.mob_no = req.body.number;
-    // other fields if needed ...
 
     const updatedUser = await profileUpdateService(user_id, updateData);
+
+    if (updatedUser.role_id === 1) {
+      const client = await Client.findByPk(user_id);
+      if (client) {
+        if (req.body.name) client.name = req.body.name;
+        if (req.body.email) client.email = req.body.email;
+        if (req.body.number) client.number = req.body.number;
+        if (req.body.address !== undefined) client.address = req.body.address;
+        if (req.body.pincode !== undefined) client.pincode = req.body.pincode;
+        if (req.body.district !== undefined) client.district = req.body.district;
+        if (req.body.state !== undefined) client.state = req.body.state;
+        await client.save();
+      }
+    }
+
     return res.json(updatedUser);
   } catch (err) {
     console.error(err);

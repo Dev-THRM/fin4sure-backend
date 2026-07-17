@@ -1,5 +1,7 @@
 import Lead from "../models/lead.model.js";
 import Client from "../models/client.model.js";
+import User from "../models/user.js";
+import Borrower from "../models/borrower.js";
 import { encryptPAN, hashPAN } from "../utils/pan.crypto.js";
 import { LOAN_PRODUCT_IDS } from "../utils/constants.js";
 
@@ -11,32 +13,50 @@ import Loan_type from "../models/loan_type.js";
 export const applyLoan = async (req, res) => {
     try {
         const userId = req.user.id || req.user._id;
-        const { pan, product, dob, address, state, district, pincode } = req.body;
+        const { pan, product, dob, address, state, district, pincode, loanAmount, tenure } = req.body;
 
-        if (!pan || !product) {
-          return res.status(400).json({ message: "PAN and product are required" });
+        if (!product) {
+          return res.status(400).json({ message: "Product is required" });
         }
 
-        const cleanPAN = pan.trim().toUpperCase();
-        if (!PAN_REGEX.test(cleanPAN)) {
-          return res.status(400).json({ message: "Invalid PAN format" });
-        }
-
-        const client = await Client.findByPk(userId);
+        let client = await Client.findByPk(userId);
         if (!client) {
-          return res.status(404).json({ message: "Client not found" });
+          const user = await User.findByPk(userId);
+          if (user && user.role_id === 1) {
+            const borrower = await Borrower.findOne({ where: { user_id: userId } });
+            client = await Client.create({
+              id: userId,
+              name: user.name,
+              email: user.email,
+              number: user.mob_no,
+              password: user.password_hash,
+              dob: borrower?.dob ? new Date(borrower.dob).toISOString().split('T')[0] : null,
+              address: borrower?.address || null,
+              pincode: borrower?.pincode_id ? String(borrower.pincode_id) : null,
+            });
+          } else {
+            return res.status(404).json({ message: "Client not found" });
+          }
         }
 
-        const panHash = hashPAN(cleanPAN);
-        const encryptedPAN = encryptPAN(cleanPAN);
+        if (pan) {
+          const cleanPAN = pan.trim().toUpperCase();
+          if (!PAN_REGEX.test(cleanPAN)) {
+            return res.status(400).json({ message: "Invalid PAN format" });
+          }
+          const panHash = hashPAN(cleanPAN);
+          const encryptedPAN = encryptPAN(cleanPAN);
+          client.pan_hash = panHash;
+          client.pan_encrypted = encryptedPAN;
+        }
 
-        client.pan_hash = panHash;
-        client.pan_encrypted = encryptedPAN;
-        client.dob = dob;
-        client.address = pincode + "," + address + "," + district + "," + state;
-        client.state = state;
-        client.district = district;
-        client.pincode = pincode;
+        if (dob) client.dob = dob;
+        if (address || pincode || district || state) {
+          client.address = (pincode || "") + "," + (address || "") + "," + (district || "") + "," + (state || "");
+        }
+        if (state) client.state = state;
+        if (district) client.district = district;
+        if (pincode) client.pincode = pincode;
         await client.save();
 
         let loanTypeId = 1; // Default fallback
@@ -51,9 +71,9 @@ export const applyLoan = async (req, res) => {
           application_no: applicationNo,
           user_id: userId,
           loan_type_id: loanTypeId,
-          loan_amount: 0,
-          loan_purpose: product,
-          tenure: 0,
+          loan_amount: loanAmount || 0,
+          loan_purpose: typeRecord ? typeRecord.name : product,
+          tenure: tenure || 0,
           status_id: 1, // applied
           partner_id: null
         });

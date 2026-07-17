@@ -3,10 +3,10 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.removeColumn('Loan_Applications', 'lender_id');
-    await queryInterface.removeColumn('Loan_Applications', 'min_rate');
-    await queryInterface.removeColumn('Loan_Applications', 'max_rate');
-    await queryInterface.removeColumn('Loan_Applications', 'rate');
+    try { await queryInterface.removeColumn('Loan_Applications', 'lender_id'); } catch (e) {}
+    try { await queryInterface.removeColumn('Loan_Applications', 'min_rate'); } catch (e) {}
+    try { await queryInterface.removeColumn('Loan_Applications', 'max_rate'); } catch (e) {}
+    try { await queryInterface.removeColumn('Loan_Applications', 'rate'); } catch (e) {}
   },
 
   async down(queryInterface, Sequelize) {

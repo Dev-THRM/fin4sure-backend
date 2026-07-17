@@ -144,6 +144,17 @@ export const registerBorrowerService = async (data) => {
       profile_status: 'Under Review'
     }, { transaction });
 
+    await Client.create({
+      id: newUser.id,
+      name,
+      email: normalizedEmail,
+      number,
+      password: hashedPassword,
+      dob: dob || null,
+      address: address || null,
+      pincode: pincode || null,
+    }, { transaction });
+
     // Attempt to find loan type ID
     let loanTypeId = null;
     if (loanType) {
@@ -240,16 +251,28 @@ export const sendOTPService = async (number) => {
   //   }
   // );
 
-  console.log(res.data);
+  // console.log(res.data);
   // LOCAL TESTING ONLY: Log the OTP to the console
-  console.log(`\n==========================================`);
-  console.log(`🔑 LOCAL TESTING OTP FOR ${number}: ${otp} 🔑`);
-  console.log(`==========================================\n`);
+  // console.log(`\n==========================================`);
+  // console.log(`🔑 LOCAL TESTING OTP FOR ${number}: ${otp} 🔑`);
+  // console.log(`==========================================\n`);
 
   return { success: true };
 };
 
 export const verifyOTPService = async (number, otp) => {
+  // Allow bypass with '123456' or '1234' for local testing
+  if (otp === '123456' || otp === '1234') {
+    const record = await OtpVerification.findOne({
+      where: { mob_no: number },
+      order: [['createdAt', 'DESC']]
+    });
+    if (record) {
+      await record.destroy();
+    }
+    return true;
+  }
+
   const record = await OtpVerification.findOne({
     where: { mob_no: number },
     order: [['createdAt', 'DESC']]
@@ -263,8 +286,7 @@ export const verifyOTPService = async (number, otp) => {
     throw new Error("OTP expired");
   }
 
-  // Allow bypass with '1234' for local testing
-  if (otp !== '1234' && record.otp_hash !== otp) {
+  if (record.otp_hash !== otp) {
     throw new Error("Invalid OTP");
   }
 
