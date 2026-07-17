@@ -123,6 +123,7 @@ export const referClient = async (req, res) => {
     const purposeText = loan_purpose?.trim() || loanType?.name || 'General';
 
     const application = await Loan_Application.create({
+      application_no: Math.floor(10000 + Math.random() * 90000),
       user_id: userId,
       partner_id: partnerId,
       loan_type_id: parseInt(loan_type_id),
