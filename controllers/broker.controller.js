@@ -88,7 +88,7 @@ export const getBrokerLeads = async (req, res) => {
     });
   } catch (err) {
     console.error("Get partner leads error:", err);
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error", error: err.message, sql: err.original?.message });
   }
 };
 

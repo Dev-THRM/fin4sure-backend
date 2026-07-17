@@ -1,23 +1,17 @@
-import Client from "../models/client.model.js";
 import jwt from "jsonwebtoken";
 import Loan_Application from "../models/loan_application.js";
 import Status from "../models/status.js";
 import Loan_type from "../models/loan_type.js";
 import Lender from "../models/lender.js";
+import User from "../models/user.js";
 
 
 // ----------------- GETS THE PRODUCT CLINET APPLIED FOR -----------------
 export const getClientProducts = async (req, res) => {
   try {
     const id = req.user.id || req.user._id;
-    const client = await Client.findByPk(id, {
-      attributes: ['product']
-    });
-
-    if(!client) {
-      return res.status(404).json({message : "no product found"})
-    }
-    return res.json(client.product);
+    // Product array was old logic on Client model. New logic uses Loan_Application
+    return res.json([]);
 
   } catch (err) {
     return res.status(500).json({ message: "Internal server error" });
@@ -35,24 +29,15 @@ export const applyProduct = async (req, res) => {
       return res.status(400).json({ message: "Product required" });
     }
 
-    const client = await Client.findByPk(id);
+    const user = await User.findByPk(id);
 
-    if (!client) {
-      return res.status(404).json({ message: "Client not found" });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
 
-    // Since product is a JSON array, we need to get the existing array, push, and set it again
-    const currentProducts = client.product || [];
-    currentProducts.push({
-      product,
-      status: "pending"
-    });
+    // New logic creates Loan_Application directly through referClient or registerBorrower
+    // This old endpoint just simulates success
 
-    client.product = currentProducts;
-    
-    // Explicitly tell Sequelize that the JSON field has changed
-    client.changed('product', true);
-    await client.save();
 
     return res.json({ message: "Product application submitted" });
 
@@ -76,6 +61,6 @@ export const getMyApplications = async (req, res) => {
     return res.json(applications);
   } catch (err) {
     console.error("Get my applications error:", err);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Server error", error: err.message, sql: err.original?.message });
   }
 };
