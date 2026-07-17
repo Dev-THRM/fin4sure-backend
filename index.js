@@ -25,6 +25,8 @@ import './models/district.js';
 import './models/city.js';
 import './models/pincode.js';
 import './models/loan_application.js';
+import './models/lender_application.js';
+import './models/document.js';
 import './models/status.js';
 import { setupAssociations } from './models/associations.js';
 
