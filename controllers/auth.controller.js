@@ -10,6 +10,7 @@ import {
 import { signAccessToken } from "../utils/jwt.utlis.js";
 import Partner from "../models/partner.model.js";
 import City from "../models/city.js";
+import Borrower from "../models/borrower.js";
 
 export const signUpHandler = async (req, res) => {
   try {
@@ -246,7 +247,7 @@ export const profileHandler = async (req, res) => {
 
     let clientDetails = {};
     if (role === "borrower") {
-      const client = await Client.findByPk(user_id);
+      const client = await Borrower.findOne({ where: { user_id } });
       if (client) {
         clientDetails = {
           dob: client.dob,
@@ -290,7 +291,7 @@ export const profileUpdateHandeler = async (req, res) => {
     const updatedUser = await profileUpdateService(user_id, updateData);
 
     if (updatedUser.role_id === 1) {
-      const client = await Client.findByPk(user_id);
+      const client = await Borrower.findOne({ where: { user_id } });
       if (client) {
         if (req.body.name) client.name = req.body.name;
         if (req.body.email) client.email = req.body.email;
