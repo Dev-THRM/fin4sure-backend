@@ -12,6 +12,14 @@ const connectDB = async () => {
   try {
     await sequelize.authenticate();
     console.log(`MySQL Connected: ${process.env.DB_HOST}`);
+
+    // Auto-migration for missing column on Hostinger
+    try {
+      await sequelize.query("ALTER TABLE loan_applications ADD COLUMN client_preference ENUM('direct_reach', 'partner_routing') DEFAULT NULL;");
+      console.log("Migration: Added client_preference column");
+    } catch (err) {
+      // Column already exists or other error, safe to ignore
+    }
   } catch (error) {
     console.error(`MySQL connection error: ${error.message}`);
     process.exit(1);
