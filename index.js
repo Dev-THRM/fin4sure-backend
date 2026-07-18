@@ -8,6 +8,7 @@ import brokerRouter from "./routes/broker.routes.js";
 import clientRouter from "./routes/client.routes.js";
 import lenderRouter from "./routes/lender.routes.js";
 import loanTypeRouter from "./routes/loanType.routes.js";
+import webhookRouter from "./routes/webhook.routes.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 
@@ -60,6 +61,7 @@ app.use("/api/broker", brokerRouter);
 app.use("/api/client", clientRouter);
 app.use("/api/lenders", lenderRouter);
 app.use("/api/loan-types", loanTypeRouter);
+app.use("/api/webhooks", webhookRouter);
 
 const PORT = process.env.PORT || 8000;
 
