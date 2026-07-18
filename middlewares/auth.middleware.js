@@ -64,3 +64,10 @@ export const isClient = (req, res, next) => {
   }
   next();
 };
+
+export const isClientOrBroker = (req, res, next) => {
+  if (req.user?.role !== 1 && req.user?.role !== 2) {
+    return res.status(403).json({ message: "Client or Broker access only" });
+  }
+  next();
+};

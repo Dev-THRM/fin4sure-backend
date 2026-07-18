@@ -3,6 +3,8 @@ import Lead from "../models/lead.model.js";
 import Loan_Application from "../models/loan_application.js";
 import Partner from "../models/partner.model.js";
 import Loan_type from "../models/loan_type.js";
+import Status from "../models/status.js";
+import User from "../models/user.js";
 
 // ----------------- GETTING CLIENT DETAILS OF THE PARTNER(INDIVIDUAL) -----------------
 export const getReferredClients = async (req, res) => {
@@ -37,7 +39,7 @@ export const getBrokerLeads = async (req, res) => {
 
     const regularLeads = leads.map((lead) => ({
       id: lead.id,
-      name: lead.name,
+      name: `${lead.name} - ${lead.product || 'Loan'} - ${lead.number || ''}`,
       email: lead.email,
       number: lead.number,
       product: lead.product,
@@ -52,24 +54,51 @@ export const getBrokerLeads = async (req, res) => {
     if (partner) {
       const applications = await Loan_Application.findAll({
         where: { partner_id: partner.id },
-        include: [{
-          model: Loan_type,
-          as: 'loanType',
-          attributes: ['id', 'name'],
-        }],
+        include: [
+          {
+            model: Loan_type,
+            as: 'loanType',
+            attributes: ['id', 'name'],
+          },
+          {
+            model: Status,
+            attributes: ['name']
+          },
+          {
+            model: User,
+            attributes: ['name', 'mob_no']
+          }
+        ],
         order: [['createdAt', 'DESC']],
       });
 
-      appLeads = applications.map((app) => ({
-        id: 'app_' + app.id,
-        name: app.loan_purpose || 'Client Referral',
-        product: app.loanType?.name || 'Loan',
-        status: app.status_id === 2 ? 'approved' : app.status_id === 3 ? 'rejected' : 'pending',
-        createdAt: app.createdAt,
-        amount: app.loan_amount,
-        client_preference: app.client_preference,
-        source: 'application',
-      }));
+      appLeads = applications.map((app) => {
+        const parts = app.loan_purpose ? app.loan_purpose.split(' — ') : [];
+        const purpose = parts[0] || 'Loan';
+        let clientName = 'Client';
+        let clientPhone = '';
+        if (parts[1]) {
+          const subParts = parts[1].split(' (');
+          clientName = subParts[0] || 'Client';
+          if (subParts[1]) {
+            clientPhone = subParts[1].replace(')', '');
+          }
+        }
+        return {
+          id: 'app_' + app.id,
+          appId: app.id,
+          name: `${clientName} - ${purpose} - ${clientPhone}`,
+          product: app.loanType?.name || 'Loan',
+          statusName: app.Status?.name?.toLowerCase() || 'applied',
+          status_id: app.status_id,
+          status: app.status_id === 2 ? 'approved' : app.status_id === 3 ? 'rejected' : 'pending',
+          createdAt: app.createdAt,
+          amount: app.loan_amount,
+          client_preference: app.client_preference,
+          source: 'application',
+          isApp: true
+        };
+      });
     }
 
     // Merge and sort by date
