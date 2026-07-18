@@ -25,6 +25,15 @@ const Admin = sequelize.define('Admin', {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  lastLogin: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  sessionStatus: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: 'Inactive',
+  },
 }, {
   timestamps: true,
   hooks: {

@@ -10,6 +10,7 @@ import {
   verifyUpdateNumberOTP,
   profileUpdateHandeler,
   registerBorrowerHandler,
+  adminLoginHandler
 } from "../controllers/auth.controller.js";
 import { verifyUser } from "../middlewares/auth.middleware.js"; // protects routes
 
@@ -21,6 +22,7 @@ authRouter.post("/signup", signUpHandler);       // Signup
 authRouter.post("/send-otp", SendOTP);          // Send OTP for signup
 authRouter.post("/verify-otp", verifyOTP);      // Verify OTP for signup/login
 authRouter.post("/login", loginHandler);        // Login
+authRouter.post("/admin-login", adminLoginHandler); // Admin static login
 authRouter.post("/register-borrower", registerBorrowerHandler); // Register borrower
 
 // Protected routes (require login)

@@ -17,13 +17,14 @@ import District from "../models/district.js";
 import Partner from "../models/partner.model.js";
 import Client from "../models/client.model.js";
 import Lender_Application from "../models/lender_application.js";
+import Admin from "../models/admin.model.js";
 
 const OtpVerification = OtpVerificationInit(sequelize, DataTypes);
 
 const OTP_EXPIRY_TIME = 5 * 60 * 1000;
 
 export const signUpService = async (data) => {
-  const { name, email, number, password, role_id, dob, address, state, district, pincode, city } = data;
+  const { name, email, number, password, role_id, dob, address, state, district, pincode, city, broker_id } = data;
 
   const normalizedEmail = email.toLowerCase().trim();
 
@@ -90,6 +91,7 @@ export const signUpService = async (data) => {
       pincode: pincode || null,
       state: state || null,
       district: district || null,
+      broker_id: broker_id || 'self',
     });
   }
 
@@ -97,7 +99,7 @@ export const signUpService = async (data) => {
 };
 
 export const registerBorrowerService = async (data) => {
-  const { name, email, number, dob, gender, address, pincode, password, loanAmount, tenure, loanPurpose, loanType, selectedLenders } = data;
+  const { name, email, number, dob, gender, address, pincode, password, loanAmount, tenure, loanPurpose, loanType, selectedLenders, broker_id } = data;
 
   const normalizedEmail = email.toLowerCase().trim();
 
@@ -113,7 +115,6 @@ export const registerBorrowerService = async (data) => {
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  // Use a transaction to ensure both user and borrower are created successfully
   const transaction = await sequelize.transaction();
 
   try {
@@ -126,7 +127,6 @@ export const registerBorrowerService = async (data) => {
       status: 'active'
     }, { transaction });
 
-    // Handle pincode (default to city_id = 1 for now if it doesn't exist)
     let pincodeRecord = await Pincode.findOne({ where: { code: pincode }, transaction });
     if (!pincodeRecord) {
       pincodeRecord = await Pincode.create({
@@ -153,14 +153,23 @@ export const registerBorrowerService = async (data) => {
       dob: dob || null,
       address: address || null,
       pincode: pincode || null,
+      broker_id: broker_id || 'self',
     }, { transaction });
 
-    // Attempt to find loan type ID
     let loanTypeId = null;
     if (loanType) {
       const typeRecord = await Loan_type.findOne({ where: { short_id: loanType }, transaction });
       if (typeRecord) {
         loanTypeId = typeRecord.id;
+      }
+    }
+
+    // Look up partner record based on broker_id
+    let partnerIdVal = null;
+    if (broker_id && broker_id !== "self") {
+      const partnerRec = await Partner.findOne({ where: { user_id: Number(broker_id) }, transaction });
+      if (partnerRec) {
+        partnerIdVal = partnerRec.id;
       }
     }
 
@@ -174,6 +183,8 @@ export const registerBorrowerService = async (data) => {
       loan_purpose: loanPurpose,
       tenure: tenure,
       status_id: 1, // Default status e.g., 'Under Review'
+      partner_id: partnerIdVal,
+      client_preference: partnerIdVal ? 'partner_routing' : 'direct_reach'
     }, { transaction });
 
     // Handle Lender Applications for multiple selected lenders
@@ -316,7 +327,23 @@ export const loginService = async (email, password) => {
   return { user, accessToken };
 };
 
-export const profileService = async (userId) => {
+export const profileService = async (userId, roleId) => {
+  if (Number(roleId) === 3) {
+    const admin = await Admin.findByPk(userId, { attributes: { exclude: ['password'] } });
+    if (!admin) {
+      throw new Error("Admin not found");
+    }
+    return {
+      id: admin.id,
+      name: admin.name,
+      email: admin.email,
+      role_id: 3,
+      createdAt: admin.createdAt,
+      updatedAt: admin.updatedAt,
+      lastLogin: admin.lastLogin,
+      sessionStatus: admin.sessionStatus
+    };
+  }
   const user = await User.findByPk(userId, { attributes: { exclude: ['password_hash'] } });
   if (!user) {
     throw new Error("User not found");
