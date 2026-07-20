@@ -70,10 +70,12 @@ app.use("/api/admin/scraper", scraperRouter);
 app.get("/reset-db-now", async (req, res) => {
   try {
     const { execSync } = await import("child_process");
+    const nodePath = process.execPath;
+    const seqPath = "node_modules/sequelize-cli/lib/sequelize";
     let output = "Starting DB reset...<br/>";
-    output += execSync("node wipe.js", { encoding: 'utf-8', env: process.env });
-    output += execSync("npx sequelize-cli db:migrate", { encoding: 'utf-8', env: process.env });
-    output += execSync("npx sequelize-cli db:seed:all", { encoding: 'utf-8', env: process.env });
+    output += execSync(`${nodePath} wipe.js`, { encoding: 'utf-8', env: process.env });
+    output += execSync(`${nodePath} ${seqPath} db:migrate`, { encoding: 'utf-8', env: process.env });
+    output += execSync(`${nodePath} ${seqPath} db:seed:all`, { encoding: 'utf-8', env: process.env });
     res.send(`<h1>Success!</h1><pre>${output}</pre>`);
   } catch (err) {
     res.status(500).send(`<h1>Error running reset</h1><pre>${err.message}\n\nSTDOUT/STDERR:\n${err.stdout || ''}\n${err.stderr || ''}</pre>`);
