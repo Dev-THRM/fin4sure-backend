@@ -4,7 +4,7 @@
 module.exports = {
   async up (queryInterface, Sequelize) {
     // 1. Insert Lenders
-    await queryInterface.bulkInsert('Lenders', [
+    await queryInterface.bulkInsert('lenders', [
       {
         name: 'State Bank of India',
         short: 'SBI',
@@ -29,8 +29,8 @@ module.exports = {
     ], {});
 
     // 2. Fetch IDs
-    const [lenders] = await queryInterface.sequelize.query(`SELECT id, short FROM Lenders;`);
-    const [loanTypes] = await queryInterface.sequelize.query(`SELECT id, short_id FROM Loan_types;`);
+    const [lenders] = await queryInterface.sequelize.query(`SELECT id, short FROM lenders;`);
+    const [loanTypes] = await queryInterface.sequelize.query(`SELECT id, short_id FROM loan_types;`);
     
     const lenderMap = {};
     lenders.forEach(l => lenderMap[l.short] = l.id);
@@ -85,12 +85,12 @@ module.exports = {
     addRate('ICICI', 'vehicle', 'floating', 9.00, 10.75);
 
     if (ratesToInsert.length > 0) {
-      await queryInterface.bulkInsert('Lender_Loan_Rates', ratesToInsert, {});
+      await queryInterface.bulkInsert('lender_loan_rates', ratesToInsert, {});
     }
   },
 
   async down (queryInterface, Sequelize) {
-    await queryInterface.bulkDelete('Lender_Loan_Rates', null, {});
-    await queryInterface.bulkDelete('Lenders', null, {});
+    await queryInterface.bulkDelete('lender_loan_rates', null, {});
+    await queryInterface.bulkDelete('lenders', null, {});
   }
 };

@@ -3,7 +3,7 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
-    await queryInterface.bulkInsert('Loan_types', [
+    await queryInterface.bulkInsert('loan_types', [
       {
         name: 'Home Loan',
         icon: '🏠',
@@ -48,6 +48,6 @@ module.exports = {
   },
 
   async down (queryInterface, Sequelize) {
-    await queryInterface.bulkDelete('Loan_types', null, {});
+    await queryInterface.bulkDelete('loan_types', null, {});
   }
 };

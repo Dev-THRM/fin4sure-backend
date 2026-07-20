@@ -15,7 +15,7 @@ module.exports = {
      * }], {});
     */
 
-    await queryInterface.bulkInsert('Roles', [
+    await queryInterface.bulkInsert('roles', [
     {
       name: 'Admin',
       createdAt: new Date(),
@@ -44,7 +44,7 @@ module.exports = {
      * Add commands to revert seed here.
      */
   
-    await queryInterface.bulkDelete('Roles', null, {});
+    await queryInterface.bulkDelete('roles', null, {});
 
   }
 };
