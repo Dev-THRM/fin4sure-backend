@@ -31,7 +31,6 @@ import './models/lender_application.js';
 import './models/document.js';
 import './models/status.js';
 import { setupAssociations } from './models/associations.js';
-import './models/scraper_run_log.js';
 import { startScraperScheduler } from './scrapers/scheduler.js';
 
 const app = express();
