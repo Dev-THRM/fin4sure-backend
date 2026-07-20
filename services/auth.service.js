@@ -117,9 +117,30 @@ export const registerBorrowerService = async (data) => {
 
     let pincodeRecord = await Pincode.findOne({ where: { code: pincode }, transaction });
     if (!pincodeRecord) {
+      const stateName = (state || "Unknown State").trim();
+      const districtName = (district || "Unknown District").trim();
+      
+      const [stateObj] = await State.findOrCreate({
+        where: { name: stateName },
+        defaults: { country: "India" },
+        transaction
+      });
+      
+      const [districtObj] = await District.findOrCreate({
+        where: { name: districtName },
+        defaults: { state_id: stateObj.id },
+        transaction
+      });
+      
+      const [cityObj] = await City.findOrCreate({
+        where: { name: "Unknown City" },
+        defaults: { district_id: districtObj.id },
+        transaction
+      });
+
       pincodeRecord = await Pincode.create({
         code: pincode,
-        city_id: 1 // Default city_id
+        city_id: cityObj.id
       }, { transaction });
     }
 
