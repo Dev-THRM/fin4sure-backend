@@ -67,9 +67,9 @@ app.use("/api/loan-types", loanTypeRouter);
 app.use("/api/webhooks", webhookRouter);
 app.use("/api/admin/scraper", scraperRouter);
 
-import { execSync } from "child_process";
-app.get("/reset-db-now", (req, res) => {
+app.get("/reset-db-now", async (req, res) => {
   try {
+    const { execSync } = await import("child_process");
     console.log("Starting DB reset...");
     execSync("node wipe.js", { stdio: 'inherit' });
     execSync("npx sequelize-cli db:migrate", { stdio: 'inherit' });
