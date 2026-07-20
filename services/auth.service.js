@@ -176,15 +176,6 @@ export const registerBorrowerService = async (data) => {
       }
     }
 
-    // Look up partner record based on broker_id
-    let partnerIdVal = null;
-    if (broker_id && broker_id !== "self") {
-      const partnerRec = await Partner.findOne({ where: { user_id: Number(broker_id) }, transaction });
-      if (partnerRec) {
-        partnerIdVal = partnerRec.id;
-      }
-    }
-
     console.log('[STEP 4] Creating loan application...');
     const applicationNo = Math.floor(10000 + Math.random() * 90000);
 
