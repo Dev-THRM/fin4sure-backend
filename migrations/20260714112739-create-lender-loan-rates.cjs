@@ -24,18 +24,7 @@ module.exports = {
       max_rate: {
         type: Sequelize.DOUBLE
       },
-      processing_fee: {
-        type: Sequelize.DOUBLE
-      },
-      max_tenure: {
-        type: Sequelize.INTEGER
-      },
-      max_amount: {
-        type: Sequelize.DOUBLE
-      },
-      offer: {
-        type: Sequelize.STRING
-      },
+
       effective_from: {
         type: Sequelize.DATE
       },

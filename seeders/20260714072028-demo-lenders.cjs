@@ -9,10 +9,6 @@ module.exports = {
         name: 'State Bank of India',
         short: 'SBI',
         type: 'psu',
-        url: 'https://sbi.co.in',
-        tc: 'Linked to EBLR. Women borrowers get 5 bps concession. Zero prepayment on floating loans.',
-        offer: '🎁 Zero PF on home loans for women (festive offer — verify at branch)',
-        logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/5/58/State_Bank_of_India_logo.svg/200px-State_Bank_of_India_logo.svg.png',
         createdAt: new Date(),
         updatedAt: new Date()
       },
@@ -20,10 +16,6 @@ module.exports = {
         name: 'HDFC Bank',
         short: 'HDFC',
         type: 'private',
-        url: 'https://hdfcbank.com',
-        tc: 'Rates are linked to Repo Rate. Foreclosure charges apply as per terms.',
-        offer: '🎉 50% off on processing fees for salaried professionals.',
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/HDFC_Bank_Logo.svg/200px-HDFC_Bank_Logo.svg.png',
         createdAt: new Date(),
         updatedAt: new Date()
       },
@@ -31,10 +23,6 @@ module.exports = {
         name: 'ICICI Bank',
         short: 'ICICI',
         type: 'private',
-        url: 'https://icicibank.com',
-        tc: 'Rates subject to credit score and loan amount. Prepayment allowed after 1 year.',
-        offer: '⚡ Instant approval for pre-approved salary account holders.',
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/ICICI_Bank_Logo.svg/200px-ICICI_Bank_Logo.svg.png',
         createdAt: new Date(),
         updatedAt: new Date()
       }
@@ -61,10 +49,6 @@ module.exports = {
         rate_type: rateType,
         min_rate: min,
         max_rate: max || min, // Fallback if max isn't provided
-        processing_fee: 0,
-        max_tenure: 360,
-        max_amount: 50000000,
-        offer: null,
         effective_from: new Date(),
         createdAt: new Date(),
         updatedAt: new Date()

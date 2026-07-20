@@ -17,18 +17,7 @@ const Lender_Loan_Rates = sequelize.define('Lender_Loan_Rates', {
   max_rate: {
     type: DataTypes.DOUBLE,
   },
-  processing_fee: {
-    type: DataTypes.DOUBLE,
-  },
-  max_tenure: {
-    type: DataTypes.INTEGER,
-  },
-  max_amount: {
-    type: DataTypes.DOUBLE,
-  },
-  offer: {
-    type: DataTypes.STRING,
-  },
+
   effective_from: {
     type: DataTypes.DATE,
   }

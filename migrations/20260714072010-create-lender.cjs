@@ -18,18 +18,7 @@ module.exports = {
       type: {
         type: Sequelize.STRING
       },
-      url: {
-        type: Sequelize.STRING
-      },
-      tc: {
-        type: Sequelize.TEXT
-      },
-      offer: {
-        type: Sequelize.TEXT
-      },
-      logo: {
-        type: Sequelize.STRING
-      },
+
       createdAt: {
         allowNull: false,
         type: Sequelize.DATE

@@ -11,18 +11,7 @@ const Lender = sequelize.define('Lender', {
   type: {
     type: DataTypes.STRING,
   },
-  url: {
-    type: DataTypes.STRING,
-  },
-  tc: {
-    type: DataTypes.TEXT,
-  },
-  offer: {
-    type: DataTypes.TEXT,
-  },
-  logo: {
-    type: DataTypes.STRING
-  }
+
 }, {
   tableName: 'lenders',
   timestamps: true,
