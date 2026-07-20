@@ -232,20 +232,10 @@ export const brokersWithFullData = async (req, res) => {
 
     const result = await Promise.all(
       brokers.map(async (broker) => {
-        const clients = await Client.findAll({
-          where: { broker_id: broker.brokerId },
-          attributes: { exclude: ['password'] }
-        });
-
-        const leads = await Lead.findAll({
-          where: { broker_id: broker.brokerId },
-          attributes: { exclude: ['pan_encrypted'] }
-        });
-
         return {
           ...broker,
-          leadCount: leads.length,
-          leads
+          leadCount: 0,
+          leads: []
         };
       })
     );

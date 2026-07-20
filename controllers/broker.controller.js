@@ -29,23 +29,6 @@ export const getBrokerLeads = async (req, res) => {
   try {
     const id = req.user._id;
 
-    // 1. Regular leads from Leads table
-    const leads = await Lead.findAll({
-      where: { broker_id: String(id) },
-      order: [['createdAt', 'DESC']]
-    });
-
-    const regularLeads = leads.map((lead) => ({
-      id: lead.id,
-      name: `${lead.name} - ${lead.product || 'Loan'} - ${lead.number || ''}`,
-      email: lead.email,
-      number: lead.number,
-      product: lead.product,
-      status: lead.status,
-      createdAt: lead.createdAt,
-      source: 'lead',
-    }));
-
     // 2. Loan applications referred by this partner
     const partner = await Partner.findOne({ where: { user_id: id } });
     let appLeads = [];

@@ -77,13 +77,22 @@ export const applyLoan = async (req, res) => {
 export const getMyLeads = async (req, res) => { // should be in client cause it provides client data to the client dashboard
   try {
     const userId = req.user.id || req.user._id;
-    const leads = await Lead.findAll({
-      where: { client_id : userId },
+    const applications = await Loan_Application.findAll({
+      where: { user_id : userId },
       order: [['createdAt', 'DESC']],
-      attributes: ["product", "status", "createdAt"]
+      include: [
+        { model: Loan_type, as: 'loanType', attributes: ['name'] },
+        { model: Status, attributes: ['name'] }
+      ]
     });
 
-    res.json(leads);
+    const formattedLeads = applications.map(app => ({
+      product: app.loanType ? app.loanType.name : 'Unknown',
+      status: app.Status ? app.Status.name : 'Unknown',
+      createdAt: app.createdAt
+    }));
+
+    res.json(formattedLeads);
 
   } catch (err) {
     console.error("Get my leads error:", err);
