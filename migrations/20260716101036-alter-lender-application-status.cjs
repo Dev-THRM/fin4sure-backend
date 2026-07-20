@@ -15,15 +15,15 @@ module.exports = {
     // Since we just created it using migration, Sequelize auto-names it something like `Lender_Applications_status_id_foreign_idx` or `lender_applications_ibfk_3`.
     try {
       // First try to drop the foreign key by the standard mysql name
-      await queryInterface.sequelize.query('ALTER TABLE `Lender_Applications` DROP FOREIGN KEY `lender_applications_ibfk_3`').catch(()=>true);
+      await queryInterface.sequelize.query('ALTER TABLE `lender_applications` DROP FOREIGN KEY `lender_applications_ibfk_3`').catch(()=>true);
     } catch(e) {}
     try {
-      await queryInterface.sequelize.query('ALTER TABLE `Lender_Applications` DROP FOREIGN KEY `Lender_Applications_status_id_foreign_idx`').catch(()=>true);
+      await queryInterface.sequelize.query('ALTER TABLE `lender_applications` DROP FOREIGN KEY `Lender_Applications_status_id_foreign_idx`').catch(()=>true);
     } catch(e) {}
     
-    await queryInterface.removeColumn('Lender_Applications', 'status_id');
+    await queryInterface.removeColumn('lender_applications', 'status_id');
     
-    await queryInterface.addColumn('Lender_Applications', 'status', {
+    await queryInterface.addColumn('lender_applications', 'status', {
       type: Sequelize.ENUM('active', 'pending', 'inactive'),
       allowNull: false,
       defaultValue: 'pending'
@@ -31,8 +31,8 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.removeColumn('Lender_Applications', 'status');
-    await queryInterface.addColumn('Lender_Applications', 'status_id', {
+    await queryInterface.removeColumn('lender_applications', 'status');
+    await queryInterface.addColumn('lender_applications', 'status_id', {
       type: Sequelize.INTEGER,
       references: {
         model: 'statuses',

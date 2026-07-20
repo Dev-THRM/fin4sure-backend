@@ -70,11 +70,11 @@ module.exports = {
     
     // Insert in chunks of 5000 (though there are only ~36 states)
     if (statesToInsert.length > 0) {
-      await queryInterface.bulkInsert('States', statesToInsert);
+      await queryInterface.bulkInsert('states', statesToInsert);
     }
 
     // Fetch inserted states to map name -> id
-    const [dbStates] = await queryInterface.sequelize.query(`SELECT id, name FROM States;`);
+    const [dbStates] = await queryInterface.sequelize.query(`SELECT id, name FROM states;`);
     const stateNameToId = {};
     for (const s of dbStates) {
       stateNameToId[s.name.toUpperCase()] = s.id;
@@ -95,10 +95,10 @@ module.exports = {
       }
     }
     
-    await insertInChunks(queryInterface, 'Districts', districtsToInsert, 5000);
+    await insertInChunks(queryInterface, 'districts', districtsToInsert, 5000);
 
     // Fetch inserted districts to map "stateId_districtName" -> id
-    const [dbDistricts] = await queryInterface.sequelize.query(`SELECT id, name, state_id FROM Districts;`);
+    const [dbDistricts] = await queryInterface.sequelize.query(`SELECT id, name, state_id FROM districts;`);
     const districtKeyToId = {}; // stateId_districtName -> id
     for (const d of dbDistricts) {
       districtKeyToId[`${d.state_id}_${d.name.toUpperCase()}`] = d.id;
@@ -122,10 +122,10 @@ module.exports = {
       }
     }
 
-    await insertInChunks(queryInterface, 'Cities', citiesToInsert, 5000);
+    await insertInChunks(queryInterface, 'cities', citiesToInsert, 5000);
 
     // Fetch inserted cities to map "districtId_cityName" -> id
-    const [dbCities] = await queryInterface.sequelize.query(`SELECT id, name, district_id FROM Cities;`);
+    const [dbCities] = await queryInterface.sequelize.query(`SELECT id, name, district_id FROM cities;`);
     const cityKeyToId = {}; // districtId_cityName -> id
     for (const c of dbCities) {
       cityKeyToId[`${c.district_id}_${c.name.toUpperCase()}`] = c.id;
@@ -156,17 +156,17 @@ module.exports = {
     }
 
     console.log(`[Seeder] Bulk inserting ${pincodesToInsert.length} final unique Pincodes in chunks...`);
-    await insertInChunks(queryInterface, 'Pincodes', pincodesToInsert, 3000);
+    await insertInChunks(queryInterface, 'pincodes', pincodesToInsert, 3000);
 
     console.log('[Seeder] All India Locations successfully seeded!');
   },
 
   async down(queryInterface, Sequelize) {
     console.log('[Seeder] Removing all locations...');
-    await queryInterface.bulkDelete('Pincodes', null, {});
-    await queryInterface.bulkDelete('Cities', null, {});
-    await queryInterface.bulkDelete('Districts', null, {});
-    await queryInterface.bulkDelete('States', null, {});
+    await queryInterface.bulkDelete('pincodes', null, {});
+    await queryInterface.bulkDelete('cities', null, {});
+    await queryInterface.bulkDelete('districts', null, {});
+    await queryInterface.bulkDelete('states', null, {});
   }
 };
 

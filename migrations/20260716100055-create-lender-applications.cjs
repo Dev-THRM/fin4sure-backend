@@ -3,7 +3,7 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('Lender_Applications', {
+    await queryInterface.createTable('lender_applications', {
       id: {
         allowNull: false,
         autoIncrement: true,
@@ -14,7 +14,7 @@ module.exports = {
         type: Sequelize.INTEGER,
         allowNull: false,
         references: {
-          model: 'Loan_Applications',
+          model: 'loan_applications',
           key: 'id'
         },
         onUpdate: 'CASCADE',
@@ -24,7 +24,7 @@ module.exports = {
         type: Sequelize.INTEGER,
         allowNull: false,
         references: {
-          model: 'Lender_Loan_Rates',
+          model: 'lender_loan_rates',
           key: 'id'
         },
         onUpdate: 'CASCADE',
@@ -52,6 +52,6 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable('Lender_Applications');
+    await queryInterface.dropTable('lender_applications');
   }
 };
