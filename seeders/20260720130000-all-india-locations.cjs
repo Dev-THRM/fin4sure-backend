@@ -6,7 +6,7 @@ const path = require('path');
 module.exports = {
   async up(queryInterface, Sequelize) {
     // Prevent duplicate seeding if run multiple times
-    const [[{ count }]] = await queryInterface.sequelize.query(`SELECT COUNT(*) as count FROM Pincodes;`);
+    const [[{ count }]] = await queryInterface.sequelize.query(`SELECT COUNT(*) as count FROM pincodes;`);
     if (count > 0) {
       console.log('[Seeder] Pincodes already seeded, skipping all-india locations.');
       return;
