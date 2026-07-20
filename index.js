@@ -67,6 +67,10 @@ app.use("/api/loan-types", loanTypeRouter);
 app.use("/api/webhooks", webhookRouter);
 app.use("/api/admin/scraper", scraperRouter);
 
+app.get("/", (req, res) => {
+  res.send("<h1>Fin4Sure Backend API is running perfectly! 🚀</h1><p>Please visit the Frontend Vercel link to view the actual website.</p>");
+});
+
 app.get("/reset-db-now", async (req, res) => {
   try {
     const { execSync } = await import("child_process");
