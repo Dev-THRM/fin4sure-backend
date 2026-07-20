@@ -2,8 +2,9 @@ import Lead from "../models/lead.model.js";
 import Loan_Application from "../models/loan_application.js";
 import Partner from "../models/partner.model.js";
 import Loan_type from "../models/loan_type.js";
-import Borrower from "../models/borrower.js";
 import Status from "../models/status.js";
+import User from "../models/user.js";
+import Borrower from "../models/borrower.js";
 
 // ----------------- GETTING CLIENT DETAILS OF THE PARTNER(INDIVIDUAL) -----------------
 export const getReferredClients = async (req, res) => {
@@ -28,6 +29,23 @@ export const getBrokerLeads = async (req, res) => {
   try {
     const id = req.user._id;
 
+    // 1. Regular leads from Leads table
+    const leads = await Lead.findAll({
+      where: { broker_id: String(id) },
+      order: [['createdAt', 'DESC']]
+    });
+
+    const regularLeads = leads.map((lead) => ({
+      id: lead.id,
+      name: `${lead.name} - ${lead.product || 'Loan'} - ${lead.number || ''}`,
+      email: lead.email,
+      number: lead.number,
+      product: lead.product,
+      status: lead.status,
+      createdAt: lead.createdAt,
+      source: 'lead',
+    }));
+
     // 2. Loan applications referred by this partner
     const partner = await Partner.findOne({ where: { user_id: id } });
     let appLeads = [];
@@ -42,22 +60,43 @@ export const getBrokerLeads = async (req, res) => {
           },
           {
             model: Status,
-            attributes: ['name'],
+            attributes: ['name']
+          },
+          {
+            model: User,
+            attributes: ['name', 'mob_no']
           }
         ],
         order: [['createdAt', 'DESC']],
       });
 
-      appLeads = applications.map((app) => ({
-        id: 'app_' + app.id,
-        name: app.loan_purpose || 'Client Referral',
-        product: app.loanType?.name || 'Loan',
-        status: app.Status?.name?.toLowerCase() || 'applied',
-        createdAt: app.createdAt,
-        amount: app.loan_amount,
-        client_preference: app.client_preference,
-        source: 'application',
-      }));
+      appLeads = applications.map((app) => {
+        const parts = app.loan_purpose ? app.loan_purpose.split(' — ') : [];
+        const purpose = parts[0] || 'Loan';
+        let clientName = 'Client';
+        let clientPhone = '';
+        if (parts[1]) {
+          const subParts = parts[1].split(' (');
+          clientName = subParts[0] || 'Client';
+          if (subParts[1]) {
+            clientPhone = subParts[1].replace(')', '');
+          }
+        }
+        return {
+          id: 'app_' + app.id,
+          appId: app.id,
+          name: `${clientName} - ${purpose} - ${clientPhone}`,
+          product: app.loanType?.name || 'Loan',
+          statusName: app.Status?.name?.toLowerCase() || 'applied',
+          status_id: app.status_id,
+          status: app.status_id === 2 ? 'approved' : app.status_id === 3 ? 'rejected' : 'pending',
+          createdAt: app.createdAt,
+          amount: app.loan_amount,
+          client_preference: app.client_preference,
+          source: 'application',
+          isApp: true
+        };
+      });
     }
 
     return res.json({

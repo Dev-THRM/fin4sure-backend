@@ -3,6 +3,7 @@ import { verifyToken } from "../utils/jwt.utlis.js";
 import { sequelize } from "../config/db.js";
 import { DataTypes } from "sequelize";
 import User from "../models/user.js";
+import Admin from "../models/admin.model.js";
 
 // ---------------------------------------------------------------------------
 
@@ -27,7 +28,12 @@ export const verifyUser = async (req, res, next) => {
       return res.status(401).json({ message: "Invalid role" });
     }
 
-    const user = await User.findByPk(_id);
+    let user;
+    if (Number(role) === 3) {
+      user = await Admin.findByPk(_id);
+    } else {
+      user = await User.findByPk(_id);
+    }
 
     if (!user) {
       return res.status(401).json({ message: "User not found" });
@@ -61,6 +67,13 @@ export const isBroker = (req, res, next) => {
 export const isClient = (req, res, next) => {
   if (req.user?.role !== 1) {
     return res.status(403).json({ message: "Client access only" });
+  }
+  next();
+};
+
+export const isClientOrBroker = (req, res, next) => {
+  if (req.user?.role !== 1 && req.user?.role !== 2) {
+    return res.status(403).json({ message: "Client or Broker access only" });
   }
   next();
 };

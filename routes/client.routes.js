@@ -2,10 +2,11 @@ import express from "express";
 import {
   applyProduct,
   getClientProducts,
-  getMyApplications
+  getMyApplications,
+  uploadDocs
 } from "../controllers/client.controller.js";
 import { applyLoan, getMyLeads } from "../controllers/lead.controller.js";
-import { verifyUser, isClient } from "../middlewares/auth.middleware.js";
+import { verifyUser, isClient, isClientOrBroker } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
@@ -19,5 +20,6 @@ router.post("/apply-product", verifyUser, isClient, applyProduct);
 router.post("/apply-loan", verifyUser, isClient, applyLoan);
 router.get("/my-leads", verifyUser, isClient, getMyLeads);
 router.get("/my-applications", verifyUser, isClient, getMyApplications);
+router.post("/upload-docs/:id", verifyUser, isClientOrBroker, uploadDocs);
 
 export default router;

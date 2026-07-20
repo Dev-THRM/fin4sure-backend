@@ -10,11 +10,12 @@ import {
 import { signAccessToken } from "../utils/jwt.utlis.js";
 import Partner from "../models/partner.model.js";
 import City from "../models/city.js";
+import Admin from "../models/admin.model.js";
 import Borrower from "../models/borrower.js";
 
 export const signUpHandler = async (req, res) => {
   try {
-    const { name, email, number, password, role, dob, address, state, district, pincode, city } = req.body;
+    const { name, email, number, password, role, dob, address, state, district, pincode, city, broker_id } = req.body;
     let role_id = 1; // Default to client
 
     if (!name || !email || !number || !password || !role) {
@@ -36,7 +37,8 @@ export const signUpHandler = async (req, res) => {
       state,
       district,
       pincode,
-      city
+      city,
+      broker_id
     });
 
     const accessToken = signAccessToken({
@@ -75,9 +77,11 @@ export const signUpHandler = async (req, res) => {
 
 export const registerBorrowerHandler = async (req, res) => {
   try {
-    const { name, email, number, dob, gender, address, pincode, password, loanAmount, tenure, loanPurpose, loanType, selectedLenders } = req.body;
+      const { name, email, number, dob, gender, address, pincode, state, district, password, loanAmount, tenure, loanPurpose, loanType, 
+selectedLenders, broker_id } = req.body;
 
-    if (!name || !email || !number || !dob || !gender || !address || !pincode || !password || !loanAmount || !tenure || !loanPurpose || !loanType || !selectedLenders || selectedLenders.length === 0) {
+      if (!name || !email || !number || !dob || !gender || !address || !pincode || !password || !loanAmount || !tenure 
+|| !loanPurpose || !loanType || !selectedLenders || selectedLenders.length === 0) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -177,6 +181,12 @@ export const Logouthandaler = async (req, res) => {
     if (!AccessToken) {
       return res.status(500).json({ message: "accesstoken not found" });
     }
+    if (req.user && Number(req.user.role) === 3) {
+      await Admin.update(
+        { sessionStatus: 'Inactive' },
+        { where: { id: req.user._id } }
+      );
+    }
     res
       .clearCookie("AccessToken", {
         httpOnly: true,
@@ -228,7 +238,7 @@ export const profileHandler = async (req, res) => {
     if (!user_id) {
       return res.status(401).json({ message: "Not authenticated" });
     }
-    const user = await profileService(user_id);
+    const user = await profileService(user_id, req.user.role);
     
     let role = "borrower";
     if (user.role_id === 2) role = "partner";
@@ -308,6 +318,60 @@ export const profileUpdateHandeler = async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: "Something went wrong" });
+  }
+};
+
+export const adminLoginHandler = async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({ message: "Password is required" });
+    }
+
+    if (password !== "finn@admin2026") {
+      return res.status(401).json({ message: "Invalid admin password" });
+    }
+
+    let admin = await Admin.findOne({ where: { email: "admin@finn4sure.com" } });
+    if (!admin) {
+      admin = await Admin.create({
+        name: "Admin",
+        email: "admin@finn4sure.com",
+        number: "9910507574",
+        password: "finn@admin2026", // Will be hashed via hook
+        sessionStatus: "Active",
+        lastLogin: new Date()
+      });
+    } else {
+      admin.lastLogin = new Date();
+      admin.sessionStatus = "Active";
+      await admin.save();
+    }
+
+    const accessToken = signAccessToken({
+      _id: admin.id,
+      role: 3
+    });
+
+    return res
+      .cookie("AccessToken", accessToken, {
+        httpOnly: true,
+        secure: false,
+        sameSite: "lax",
+        maxAge: 24 * 60 * 60 * 1000,
+      })
+      .json({
+        success: true,
+        user: {
+          _id: admin.id,
+          name: admin.name,
+          email: admin.email,
+          role: "admin"
+        }
+      });
+  } catch (err) {
+    console.error("Admin login error:", err);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
