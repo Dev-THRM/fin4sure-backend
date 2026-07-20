@@ -71,6 +71,16 @@ app.get("/", (req, res) => {
   res.send("<h1>Fin4Sure Backend API is running perfectly! 🚀</h1><p>Please visit the Frontend Vercel link to view the actual website.</p>");
 });
 
+app.get("/run-scraper-now", async (req, res) => {
+  try {
+    const { triggerFullScrape } = await import("./scrapers/orchestrator.js");
+    triggerFullScrape('manual_get_route');
+    res.send("<h1>Scraper Started!</h1><p>Check the database in a few minutes, the scraper is currently running in the background.</p>");
+  } catch (err) {
+    res.status(500).send("Error triggering scraper: " + err.message);
+  }
+});
+
 app.get("/reset-db-now", async (req, res) => {
   try {
     const { execSync } = await import("child_process");
