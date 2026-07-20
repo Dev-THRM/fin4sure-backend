@@ -85,7 +85,7 @@ const getBrokersList = async () => {
           email: c.email || "-",
           number: c.number || "-",
           dob: c.dob || "-",
-          address: c.address || "-"
+          address: c.address || c.district || c.state || "-"
         };
       });
 
@@ -141,7 +141,7 @@ export const userCount = async (req, res) => {
       SELECT COUNT(la.id) as count
       FROM loan_applications la
       JOIN statuses s ON la.status_id = s.id
-      WHERE s.name IN ('docs','credit','submitted','sanction','legal')
+      WHERE s.name IN ('applied','docs','credit','submitted','sanction','legal','in-progress')
     `, { type: sequelize.QueryTypes.SELECT });
     const inProgressCount = parseInt(inProgressStatuses[0]?.count || 0);
 
@@ -149,7 +149,7 @@ export const userCount = async (req, res) => {
       SELECT COUNT(la.id) as count
       FROM loan_applications la
       JOIN statuses s ON la.status_id = s.id
-      WHERE s.name = 'disbursed'
+      WHERE s.name IN ('disbursed', 'completed')
     `, { type: sequelize.QueryTypes.SELECT });
     const completedCount = parseInt(completedStatuses[0]?.count || 0);
 
@@ -172,12 +172,24 @@ export const userCount = async (req, res) => {
       SELECT COALESCE(SUM(la.loan_amount), 0) as disbursed_amount
       FROM loan_applications la
       JOIN statuses s ON la.status_id = s.id
-      WHERE s.name = 'disbursed'
+      WHERE s.name IN ('disbursed', 'completed')
     `, { type: sequelize.QueryTypes.SELECT });
     const disbursedAmount = parseFloat(disbursedAmountResult[0]?.disbursed_amount || 0);
 
-    // Active borrowers = clients with active applications
-    const activeBorrowers = await Client.count();
+    // Active borrowers = clients with no loans, or at least one loan that is not disbursed/completed/rejected
+    const activeBorrowersResult = await sequelize.query(`
+      SELECT COUNT(DISTINCT c.id) as count
+      FROM clients c
+      WHERE NOT EXISTS (
+        SELECT 1 FROM loan_applications la WHERE la.user_id = c.id
+      )
+      OR EXISTS (
+        SELECT 1 FROM loan_applications la
+        JOIN statuses s ON la.status_id = s.id
+        WHERE la.user_id = c.id AND s.name NOT IN ('disbursed', 'completed', 'rejected')
+      )
+    `, { type: sequelize.QueryTypes.SELECT });
+    const activeBorrowers = parseInt(activeBorrowersResult[0]?.count || 0);
 
     const topLenders = await sequelize.query(`
       SELECT l.name, COUNT(la.id) as count, l.type
@@ -262,13 +274,21 @@ export const allLeads = async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
 
-    const enrichedLeads = applications.map((app) => {
+    const enrichedLeads = await Promise.all(applications.map(async (app) => {
+      let clientObj = null;
+      if (app.user_id) {
+        clientObj = await Client.findByPk(app.user_id);
+      }
       return {
         id: app.id,
         application_no: app.application_no,
         name: app.User ? app.User.name : "Unknown",
         email: app.User ? app.User.email : "-",
         number: app.User ? app.User.mob_no : "-",
+        address: clientObj ? clientObj.address : "-",
+        state: clientObj ? clientObj.state : "-",
+        district: clientObj ? clientObj.district : "-",
+        dob: clientObj ? clientObj.dob : "-",
         product: app.loanType ? app.loanType.name : "Home Loan",
         status: app.Status ? app.Status.name.toLowerCase() : "pending",
         source: app.client_preference === 'partner_routing' ? "Partner" : "Direct",
@@ -280,7 +300,7 @@ export const allLeads = async (req, res) => {
         createdAt: app.createdAt,
         updatedAt: app.updatedAt
       };
-    });
+    }));
 
     res.json(enrichedLeads);
   } catch (e) {
@@ -589,10 +609,10 @@ export const exportData = async (req, res) => {
       const row = sheet.addRow(item);
       const update = new Date(item.createdAt);
       if (update >= start && update <= end) {
-          if (item.status === "disbursed") {
+          if (item.status === "completed" || item.status === "disbursed") {
             row.getCell("status").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "C6EFCE" } };
           }
-          if (item.status === "credit") {
+          if (item.status === "rejected") {
             row.getCell("status").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFC7CE" } };
           }
       }
@@ -799,13 +819,29 @@ export const allClients = async (req, res) => {
     
     const enrichedClients = await Promise.all(
       clients.map(async (client) => {
-        const count = await Loan_Application.count({
-          where: { user_id: client.id }
+        const applications = await Loan_Application.findAll({
+          where: { user_id: client.id },
+          include: [{ model: Status, attributes: ['name'] }]
         });
         
+        let clientStatus = 'active';
+        const loanCount = applications.length;
+
+        if (loanCount > 0) {
+          const allRejected = applications.every(app => app.Status && app.Status.name.toLowerCase() === 'rejected');
+          const noActive = applications.every(app => app.Status && ['disbursed', 'completed', 'rejected'].includes(app.Status.name.toLowerCase()));
+          
+          if (allRejected) {
+            clientStatus = 'rejected';
+          } else if (noActive) {
+            clientStatus = 'inactive';
+          }
+        }
+
         return {
           ...client,
-          loanCount: count
+          loanCount: loanCount,
+          status: clientStatus
         };
       })
     );

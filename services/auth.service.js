@@ -99,7 +99,7 @@ export const signUpService = async (data) => {
 };
 
 export const registerBorrowerService = async (data) => {
-  const { name, email, number, dob, gender, address, pincode, password, loanAmount, tenure, loanPurpose, loanType, selectedLenders, broker_id } = data;
+  const { name, email, number, dob, gender, address, pincode, state, district, password, loanAmount, tenure, loanPurpose, loanType, selectedLenders, broker_id } = data;
 
   const normalizedEmail = email.toLowerCase().trim();
 
@@ -153,6 +153,8 @@ export const registerBorrowerService = async (data) => {
       dob: dob || null,
       address: address || null,
       pincode: pincode || null,
+      state: state || null,
+      district: district || null,
       broker_id: broker_id || 'self',
     }, { transaction });
 

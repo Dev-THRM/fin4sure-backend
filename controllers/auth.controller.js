@@ -77,9 +77,11 @@ export const signUpHandler = async (req, res) => {
 
 export const registerBorrowerHandler = async (req, res) => {
   try {
-    const { name, email, number, dob, gender, address, pincode, password, loanAmount, tenure, loanPurpose, loanType, selectedLenders, broker_id } = req.body;
+      const { name, email, number, dob, gender, address, pincode, state, district, password, loanAmount, tenure, loanPurpose, loanType, 
+selectedLenders, broker_id } = req.body;
 
-    if (!name || !email || !number || !dob || !gender || !address || !pincode || !password || !loanAmount || !tenure || !loanPurpose || !loanType || !selectedLenders || selectedLenders.length === 0) {
+      if (!name || !email || !number || !dob || !gender || !address || !pincode || !password || !loanAmount || !tenure 
+|| !loanPurpose || !loanType || !selectedLenders || selectedLenders.length === 0) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
