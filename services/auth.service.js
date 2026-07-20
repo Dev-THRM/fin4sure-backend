@@ -78,20 +78,8 @@ export const signUpService = async (data) => {
       city_id: cityObj.id
     });
   } else if (role_id === 1) {
-    // Borrower / Client role
-    await Client.create({
-      id: newUser.id,
-      name,
-      email: normalizedEmail,
-      number,
-      password: password, // hooks will hash it
-      dob: dob || null,
-      address: address || null,
-      pincode: pincode || null,
-      state: state || null,
-      district: district || null,
-      broker_id: broker_id || 'self',
-    });
+    // Borrower role (User already created)
+    // Borrower profile will be completed during loan application
   }
 
   return newUser;
@@ -145,19 +133,7 @@ export const registerBorrowerService = async (data) => {
       profile_status: 'Under Review'
     }, { transaction });
 
-    await Client.create({
-      id: newUser.id,
-      name,
-      email: normalizedEmail,
-      number,
-      password: hashedPassword,
-      dob: dob || null,
-      address: address || null,
-      pincode: pincode || null,
-      state: state || null,
-      district: district || null,
-      broker_id: broker_id || 'self',
-    }, { transaction });
+
 
     let loanTypeId = null;
     if (loanType) {
