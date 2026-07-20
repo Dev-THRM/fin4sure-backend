@@ -9,6 +9,7 @@ import clientRouter from "./routes/client.routes.js";
 import lenderRouter from "./routes/lender.routes.js";
 import loanTypeRouter from "./routes/loanType.routes.js";
 import webhookRouter from "./routes/webhook.routes.js";
+import scraperRouter from "./routes/scraper.routes.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 
@@ -30,6 +31,8 @@ import './models/lender_application.js';
 import './models/document.js';
 import './models/status.js';
 import { setupAssociations } from './models/associations.js';
+import './models/scraper_run_log.js';
+import { startScraperScheduler } from './scrapers/scheduler.js';
 
 const app = express();
 
@@ -62,6 +65,7 @@ app.use("/api/client", clientRouter);
 app.use("/api/lenders", lenderRouter);
 app.use("/api/loan-types", loanTypeRouter);
 app.use("/api/webhooks", webhookRouter);
+app.use("/api/admin/scraper", scraperRouter);
 
 const PORT = process.env.PORT || 8000;
 
@@ -72,6 +76,9 @@ const startServer = async () => {
     setupAssociations();
     await sequelize.authenticate(); // We do not use sync({alter: true}) to avoid the 64 keys bug.
     console.log("Database connected successfully");
+
+    // Start the weekly loan rate scraper scheduler
+    startScraperScheduler();
 
     app.listen(PORT, () => {
       console.log(`Server is running on PORT ${PORT}`);
