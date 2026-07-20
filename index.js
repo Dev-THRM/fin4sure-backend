@@ -70,14 +70,13 @@ app.use("/api/admin/scraper", scraperRouter);
 app.get("/reset-db-now", async (req, res) => {
   try {
     const { execSync } = await import("child_process");
-    console.log("Starting DB reset...");
-    execSync("node wipe.js", { stdio: 'inherit' });
-    execSync("npx sequelize-cli db:migrate", { stdio: 'inherit' });
-    execSync("npx sequelize-cli db:seed:all", { stdio: 'inherit' });
-    res.send("<h1>Database wiped, migrated, and seeded successfully!</h1><p>You can now close this tab.</p>");
+    let output = "Starting DB reset...<br/>";
+    output += execSync("node wipe.js", { encoding: 'utf-8', env: process.env });
+    output += execSync("npx sequelize-cli db:migrate", { encoding: 'utf-8', env: process.env });
+    output += execSync("npx sequelize-cli db:seed:all", { encoding: 'utf-8', env: process.env });
+    res.send(`<h1>Success!</h1><pre>${output}</pre>`);
   } catch (err) {
-    console.error(err);
-    res.status(500).send("<h1>Error running reset</h1><p>" + err.message + "</p>");
+    res.status(500).send(`<h1>Error running reset</h1><pre>${err.message}\n\nSTDOUT/STDERR:\n${err.stdout || ''}\n${err.stderr || ''}</pre>`);
   }
 });
 
