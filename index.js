@@ -67,6 +67,20 @@ app.use("/api/loan-types", loanTypeRouter);
 app.use("/api/webhooks", webhookRouter);
 app.use("/api/admin/scraper", scraperRouter);
 
+import { execSync } from "child_process";
+app.get("/reset-db-now", (req, res) => {
+  try {
+    console.log("Starting DB reset...");
+    execSync("node wipe.js", { stdio: 'inherit' });
+    execSync("npx sequelize-cli db:migrate", { stdio: 'inherit' });
+    execSync("npx sequelize-cli db:seed:all", { stdio: 'inherit' });
+    res.send("<h1>Database wiped, migrated, and seeded successfully!</h1><p>You can now close this tab.</p>");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("<h1>Error running reset</h1><p>" + err.message + "</p>");
+  }
+});
+
 const PORT = process.env.PORT || 8000;
 
 const startServer = async () => {
