@@ -34,11 +34,7 @@ const getBrokersList = async () => {
       const partnerIdVal = partner ? partner.id : null;
       console.log(`DEBUG: broker user_id=${user.id}, partnerIdVal=${partnerIdVal}`);
 
-      // 1. Get clients from clients table
-      const clientsFromTable = await Client.findAll({
-        where: { broker_id: String(user.id) },
-        raw: true
-      });
+      // 1. (Legacy clients table removed)
 
       // 2. Get referred applications to extract client details
       const referredApps = partnerIdVal ? await Loan_Application.findAll({
@@ -76,26 +72,7 @@ const getBrokersList = async () => {
       }).filter(Boolean);
       console.log(`DEBUG: broker user_id=${user.id}, clientsFromApps:`, JSON.stringify(clientsFromApps));
 
-      const combinedClientsMap = {};
-      
-      clientsFromTable.forEach(c => {
-        combinedClientsMap[c.number || c.name] = {
-          id: c.id,
-          name: c.name,
-          email: c.email || "-",
-          number: c.number || "-",
-          dob: c.dob || "-",
-          address: c.address || c.district || c.state || "-"
-        };
-      });
-
-      clientsFromApps.forEach(c => {
-        if (!combinedClientsMap[c.number || c.name]) {
-          combinedClientsMap[c.number || c.name] = c;
-        }
-      });
-
-      const linkedClients = Object.values(combinedClientsMap);
+      const linkedClients = clientsFromApps;
 
       const countLeads = partnerIdVal ? await Loan_Application.count({ where: { partner_id: partnerIdVal } }) : 0;
 
@@ -179,14 +156,16 @@ export const userCount = async (req, res) => {
     // Active borrowers = clients with no loans, or at least one loan that is not disbursed/completed/rejected
     const activeBorrowersResult = await sequelize.query(`
       SELECT COUNT(DISTINCT c.id) as count
-      FROM clients c
-      WHERE NOT EXISTS (
-        SELECT 1 FROM loan_applications la WHERE la.user_id = c.id
-      )
-      OR EXISTS (
-        SELECT 1 FROM loan_applications la
-        JOIN statuses s ON la.status_id = s.id
-        WHERE la.user_id = c.id AND s.name NOT IN ('disbursed', 'completed', 'rejected')
+      FROM users c
+      WHERE c.role_id = 1 AND (
+        NOT EXISTS (
+          SELECT 1 FROM loan_applications la WHERE la.user_id = c.id
+        )
+        OR EXISTS (
+          SELECT 1 FROM loan_applications la
+          JOIN statuses s ON la.status_id = s.id
+          WHERE la.user_id = c.id AND s.name NOT IN ('disbursed', 'completed', 'rejected')
+        )
       )
     `, { type: sequelize.QueryTypes.SELECT });
     const activeBorrowers = parseInt(activeBorrowersResult[0]?.count || 0);
@@ -270,9 +249,9 @@ export const allLeads = async (req, res) => {
     });
 
     const enrichedLeads = await Promise.all(applications.map(async (app) => {
-      let clientObj = null;
+      let borrowerObj = null;
       if (app.user_id) {
-        clientObj = await Client.findByPk(app.user_id);
+        borrowerObj = await Borrower.findOne({ where: { user_id: app.user_id } });
       }
       return {
         id: app.id,
@@ -280,10 +259,10 @@ export const allLeads = async (req, res) => {
         name: app.User ? app.User.name : "Unknown",
         email: app.User ? app.User.email : "-",
         number: app.User ? app.User.mob_no : "-",
-        address: clientObj ? clientObj.address : "-",
-        state: clientObj ? clientObj.state : "-",
-        district: clientObj ? clientObj.district : "-",
-        dob: clientObj ? clientObj.dob : "-",
+        address: borrowerObj ? borrowerObj.address : "-",
+        state: borrowerObj ? borrowerObj.state : "-",
+        district: borrowerObj ? borrowerObj.district : "-",
+        dob: borrowerObj ? borrowerObj.dob : "-",
         product: app.loanType ? app.loanType.name : "Home Loan",
         status: app.Status ? app.Status.name.toLowerCase() : "pending",
         source: app.client_preference === 'partner_routing' ? "Partner" : "Direct",
@@ -807,7 +786,8 @@ export const getAdminAccessDetails = async (req, res) => {
 ----------------------------------------------------- */
 export const allClients = async (req, res) => {
   try {
-    const clients = await Client.findAll({
+    const clients = await User.findAll({
+      where: { role_id: 1 },
       order: [['createdAt', 'DESC']],
       raw: true
     });
