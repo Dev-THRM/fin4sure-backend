@@ -53,7 +53,7 @@ const getBrokersList = async () => {
           if (subParts[1]) {
             clientPhone = subParts[1].replace(')', '');
           }
-        } else if (app.user_id !== user.id) {
+        } else if (app.borrower_id !== null) {
           clientName = "Registered Client";
         } else {
           return null; 
@@ -155,16 +155,17 @@ export const userCount = async (req, res) => {
 
     // Active borrowers = clients with no loans, or at least one loan that is not disbursed/completed/rejected
     const activeBorrowersResult = await sequelize.query(`
-      SELECT COUNT(DISTINCT c.id) as count
+      SELECT COUNT(DISTINCT c.id) as count 
       FROM users c
+      LEFT JOIN borrowers b ON c.id = b.user_id
       WHERE c.role_id = 1 AND (
+        b.id IS NULL OR
         NOT EXISTS (
-          SELECT 1 FROM loan_applications la WHERE la.user_id = c.id
-        )
-        OR EXISTS (
+          SELECT 1 FROM loan_applications la WHERE la.borrower_id = b.id
+        ) OR EXISTS (
           SELECT 1 FROM loan_applications la
-          JOIN statuses s ON la.status_id = s.id
-          WHERE la.user_id = c.id AND s.name NOT IN ('disbursed', 'completed', 'rejected')
+          INNER JOIN statuses s ON la.status_id = s.id
+          WHERE la.borrower_id = b.id AND s.name NOT IN ('disbursed', 'completed', 'rejected')
         )
       )
     `, { type: sequelize.QueryTypes.SELECT });
@@ -250,8 +251,8 @@ export const allLeads = async (req, res) => {
 
     const enrichedLeads = await Promise.all(applications.map(async (app) => {
       let borrowerObj = null;
-      if (app.user_id) {
-        borrowerObj = await Borrower.findOne({ where: { user_id: app.user_id } });
+      if (app.borrower_id) {
+        borrowerObj = await Borrower.findOne({ where: { id: app.borrower_id } });
       }
       return {
         id: app.id,

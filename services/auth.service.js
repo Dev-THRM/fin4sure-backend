@@ -179,7 +179,7 @@ export const registerBorrowerService = async (data) => {
 
     const newLoanApp = await Loan_Application.create({
       application_no: applicationNo,
-      user_id: newUser.id,
+      borrower_id: newBorrower.id,
       loan_type_id: loanTypeId,
       loan_amount: loanAmount,
       loan_purpose: loanPurpose,

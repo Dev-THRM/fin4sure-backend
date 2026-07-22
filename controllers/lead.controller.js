@@ -51,10 +51,15 @@ export const applyLoan = async (req, res) => {
         }
 
         const applicationNo = Math.floor(10000 + Math.random() * 90000);
+        
+        const borrower = await Borrower.findOne({ where: { user_id: userId } });
+        if (!borrower) {
+          return res.status(404).json({ message: "Borrower profile not found" });
+        }
 
         const newLoanApp = await Loan_Application.create({
           application_no: applicationNo,
-          user_id: userId,
+          borrower_id: borrower.id,
           loan_type_id: loanTypeId,
           loan_amount: loanAmount || 0,
           loan_purpose: typeRecord ? typeRecord.name : product,

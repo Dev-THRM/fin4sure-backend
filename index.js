@@ -161,6 +161,23 @@ const startServer = async () => {
       console.log("Failed to alter borrowers table (might already be updated or not exist):", err.message);
     }
 
+    // Update loan_applications to use borrower_id instead of user_id
+    try {
+      // First check if user_id column exists before attempting to alter
+      const [results] = await sequelize.query("SHOW COLUMNS FROM loan_applications LIKE 'user_id'");
+      if (results && results.length > 0) {
+        console.log("Migrating loan_applications schema...");
+        await sequelize.query("SET FOREIGN_KEY_CHECKS = 0;");
+        await sequelize.query("TRUNCATE TABLE loan_applications;");
+        await sequelize.query("ALTER TABLE loan_applications DROP COLUMN user_id;");
+        await sequelize.query("ALTER TABLE loan_applications ADD COLUMN borrower_id INT NULL AFTER application_no;");
+        await sequelize.query("SET FOREIGN_KEY_CHECKS = 1;");
+        console.log("loan_applications schema updated successfully.");
+      }
+    } catch (err) {
+      console.log("Failed to migrate loan_applications table:", err.message);
+    }
+
     console.log("Database connected successfully");
 
     // Start the weekly loan rate scraper scheduler

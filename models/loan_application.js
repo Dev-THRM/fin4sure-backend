@@ -3,7 +3,7 @@ import { sequelize } from '../config/db.js';
 
 const Loan_Application = sequelize.define('Loan_Application', {
   application_no: DataTypes.INTEGER,
-  user_id: DataTypes.INTEGER,
+  borrower_id: DataTypes.INTEGER,
   loan_type_id: DataTypes.INTEGER,
   loan_amount: DataTypes.DOUBLE,
   loan_purpose: DataTypes.STRING,

@@ -52,8 +52,11 @@ export const applyProduct = async (req, res) => {
 export const getMyApplications = async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
+    const borrower = await Borrower.findOne({ where: { user_id: userId } });
+    if (!borrower) return res.json([]);
+
     const applications = await Loan_Application.findAll({
-      where: { user_id: userId },
+      where: { borrower_id: borrower.id },
       include: [
         { model: Status, attributes: ['name'] },
         { model: Loan_type, attributes: ['name', 'short_id'] }
@@ -84,8 +87,12 @@ export const uploadDocs = async (req, res) => {
         where: { id: applicationId, partner_id: partner.id }
       });
     } else {
+      const borrower = await Borrower.findOne({ where: { user_id: userId } });
+      if (!borrower) {
+        return res.status(403).json({ message: "Borrower record not found." });
+      }
       app = await Loan_Application.findOne({
-        where: { id: applicationId, user_id: userId }
+        where: { id: applicationId, borrower_id: borrower.id }
       });
     }
 

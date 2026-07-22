@@ -5,6 +5,8 @@ import Loan_type from "../models/loan_type.js";
 import Status from "../models/status.js";
 import User from "../models/user.js";
 import Borrower from "../models/borrower.js";
+import bcrypt from "bcryptjs";
+import { Op } from "sequelize";
 
 // ----------------- GETTING CLIENT DETAILS OF THE PARTNER(INDIVIDUAL) -----------------
 export const getReferredClients = async (req, res) => {
@@ -122,9 +124,53 @@ export const referClient = async (req, res) => {
     const loanType = await Loan_type.findByPk(parseInt(loan_type_id));
     const purposeText = loan_purpose?.trim() || loanType?.name || 'General';
 
+    // Check if user already exists
+    let clientUser = await User.findOne({ 
+      where: { 
+        [Op.or]: [{ email: email }, { phone_number: number }] 
+      } 
+    });
+
+    let borrowerId = null;
+
+    if (!clientUser) {
+      // Create new user profile with dummy password
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash("Password@12", salt);
+
+      clientUser = await User.create({
+        name: name,
+        email: email,
+        phone_number: number,
+        password_hash: hashedPassword,
+        role_id: 1, // Borrower role
+        status: 'Active'
+      });
+
+      // Send WhatsApp message to user (Commented out for now as per instructions)
+      // await sendWhatsAppMessage(number, `Your Fin4Sure account has been created. Temporary password: Password@12. Please log in and change your password.`);
+
+      // Create new borrower profile
+      const newBorrower = await Borrower.create({
+        user_id: clientUser.id,
+        dob: new Date('1990-01-01'), // Default dummy DOB
+        gender: 'Other',
+        address: 'To be updated',
+        pincode_id: 1, // Default dummy pincode
+        profile_status: 'Active'
+      });
+      borrowerId = newBorrower.id;
+    } else {
+      // If user exists, find their borrower profile
+      const existingBorrower = await Borrower.findOne({ where: { user_id: clientUser.id } });
+      if (existingBorrower) {
+        borrowerId = existingBorrower.id;
+      }
+    }
+
     const application = await Loan_Application.create({
       application_no: Math.floor(10000 + Math.random() * 90000),
-      user_id: userId,
+      borrower_id: borrowerId,
       partner_id: partnerId,
       loan_type_id: parseInt(loan_type_id),
       loan_amount: parseFloat(loan_amount),

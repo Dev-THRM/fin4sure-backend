@@ -12,8 +12,9 @@ module.exports = {
       application_no: {
         type: Sequelize.INTEGER
       },
-      user_id: {
-        type: Sequelize.INTEGER
+      borrower_id: {
+        type: Sequelize.INTEGER,
+        allowNull: true
       },
       lender_id: {
         type: Sequelize.INTEGER
