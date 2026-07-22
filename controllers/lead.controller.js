@@ -8,11 +8,13 @@ const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
 
 import Loan_Application from "../models/loan_application.js";
 import Loan_type from "../models/loan_type.js";
+import Lender_Loan_Rates from "../models/lender_loan_rates.js";
+import Lender_Application from "../models/lender_application.js";
 
 export const applyLoan = async (req, res) => {
     try {
         const userId = req.user.id || req.user._id;
-        const { pan, product, dob, address, state, district, pincode, loanAmount, tenure, lender_id, loan_purpose } = req.body;
+        const { pan, product, dob, address, state, district, pincode, loanAmount, tenure, selectedLenders, loan_purpose } = req.body;
 
         if (!product) {
           return res.status(400).json({ message: "Product is required" });
@@ -70,9 +72,24 @@ export const applyLoan = async (req, res) => {
           tenure: tenure || 0,
           status_id: 1, // applied
           partner_id: null,
-          lender_id: lender_id || null,
+          lender_id: null,
           client_preference: null
         });
+
+        if (selectedLenders && Array.isArray(selectedLenders) && selectedLenders.length > 0) {
+          for (const lenderId of selectedLenders) {
+            const rateObj = await Lender_Loan_Rates.findOne({
+              where: { lender_id: lenderId, loan_type_id: loanTypeId }
+            });
+            if (rateObj) {
+              await Lender_Application.create({
+                loan_application_id: newLoanApp.id,
+                lender_rate_id: rateObj.id,
+                status: 'pending'
+              });
+            }
+          }
+        }
 
         return res.status(201).json({
           message: "Loan application submitted successfully",
