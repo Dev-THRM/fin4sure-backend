@@ -9,15 +9,6 @@ async function seed() {
   try {
     console.log("Connecting to the database...");
     await sequelize.authenticate();
-    
-    console.log("Wiping existing location data to start fresh...");
-    await sequelize.query('SET FOREIGN_KEY_CHECKS = 0;');
-    await sequelize.query('TRUNCATE TABLE Pincodes;');
-    await sequelize.query('TRUNCATE TABLE Cities;');
-    await sequelize.query('TRUNCATE TABLE Districts;');
-    await sequelize.query('TRUNCATE TABLE States;');
-    await sequelize.query('SET FOREIGN_KEY_CHECKS = 1;');
-    console.log("Wipe complete!");
 
     console.log("Fetching Pincodes data...");
     const res = await fetch('https://raw.githubusercontent.com/mithunsasidharan/India-Pincode-Lookup/master/pincodes.json');
