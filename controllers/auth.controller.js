@@ -10,8 +10,11 @@ import {
 import { signAccessToken } from "../utils/jwt.utlis.js";
 import Partner from "../models/partner.model.js";
 import City from "../models/city.js";
+import District from "../models/district.js";
+import State from "../models/state.js";
 import Admin from "../models/admin.model.js";
 import Borrower from "../models/borrower.js";
+import Pincode from "../models/pincode.js";
 
 export const signUpHandler = async (req, res) => {
   try {
@@ -257,14 +260,29 @@ export const profileHandler = async (req, res) => {
 
     let clientDetails = {};
     if (role === "borrower") {
-      const client = await Borrower.findOne({ where: { user_id } });
+      const client = await Borrower.findOne({ 
+        where: { user_id },
+        include: [{
+          model: Pincode,
+          include: [{
+            model: City,
+            include: [{
+              model: District,
+              include: [{
+                model: State
+              }]
+            }]
+          }]
+        }]
+      });
       if (client) {
         clientDetails = {
           dob: client.dob,
           address: client.address,
-          pincode: client.pincode,
-          state: client.state,
-          district: client.district,
+          pincode: client.Pincode?.code || "",
+          state: client.Pincode?.City?.District?.State?.name || "",
+          district: client.Pincode?.City?.District?.name || "",
+          city: client.Pincode?.City?.name || ""
         };
       }
     }
@@ -307,9 +325,13 @@ export const profileUpdateHandeler = async (req, res) => {
         if (req.body.email) client.email = req.body.email;
         if (req.body.number) client.number = req.body.number;
         if (req.body.address !== undefined) client.address = req.body.address;
-        if (req.body.pincode !== undefined) client.pincode = req.body.pincode;
-        if (req.body.district !== undefined) client.district = req.body.district;
-        if (req.body.state !== undefined) client.state = req.body.state;
+        
+        if (req.body.pincode) {
+          const pin = await Pincode.findOne({ where: { code: req.body.pincode } });
+          if (pin) {
+            client.pincode_id = pin.id;
+          }
+        }
         await client.save();
       }
     }
