@@ -50,7 +50,11 @@ export const applyLoan = async (req, res) => {
             loanTypeId = typeRecord.id;
         }
 
-        const applicationNo = Math.floor(10000 + Math.random() * 90000);
+        let applicationNo = 10000;
+        const maxAppNo = await Loan_Application.max('application_no');
+        if (maxAppNo && maxAppNo >= 10000) {
+          applicationNo = maxAppNo + 1;
+        }
         
         const borrower = await Borrower.findOne({ where: { user_id: userId } });
         if (!borrower) {

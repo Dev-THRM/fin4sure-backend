@@ -168,8 +168,14 @@ export const referClient = async (req, res) => {
       }
     }
 
+    let applicationNo = 10000;
+    const maxAppNo = await Loan_Application.max('application_no');
+    if (maxAppNo && maxAppNo >= 10000) {
+      applicationNo = maxAppNo + 1;
+    }
+
     const application = await Loan_Application.create({
-      application_no: Math.floor(10000 + Math.random() * 90000),
+      application_no: applicationNo,
       borrower_id: borrowerId,
       partner_id: partnerId,
       loan_type_id: parseInt(loan_type_id),
