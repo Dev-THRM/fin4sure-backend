@@ -6,6 +6,7 @@ import Lender from "../models/lender.js";
 import Document from "../models/document.js";
 import Partner from "../models/partner.model.js";
 import User from "../models/user.js";
+import Borrower from "../models/borrower.js";
 
 
 // ----------------- GETS THE PRODUCT CLINET APPLIED FOR -----------------
