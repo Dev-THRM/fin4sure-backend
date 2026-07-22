@@ -11,11 +11,31 @@ async function seed() {
     await sequelize.authenticate();
 
     console.log("Cleaning up any existing duplicate pincodes in the database...");
-    await sequelize.query(`
-      DELETE t1 FROM pincodes t1
-      INNER JOIN pincodes t2 
-      WHERE t1.id > t2.id AND t1.code = t2.code;
-    `);
+    
+    // Deduplicate in Node memory to avoid O(N^2) unindexed SQL join timeout!
+    const allPincodes = await Pincode.findAll({ attributes: ['id', 'code'] });
+    const seenCodes = new Set();
+    const idsToDelete = [];
+    
+    for (const p of allPincodes) {
+      if (seenCodes.has(p.code)) {
+        idsToDelete.push(p.id);
+      } else {
+        seenCodes.add(p.code);
+      }
+    }
+
+    if (idsToDelete.length > 0) {
+      console.log(`Found ${idsToDelete.length} duplicates. Deleting them now...`);
+      // Delete in chunks to avoid large query limits
+      for (let i = 0; i < idsToDelete.length; i += 5000) {
+        const chunk = idsToDelete.slice(i, i + 5000);
+        await Pincode.destroy({ where: { id: chunk } });
+      }
+      console.log("Duplicates deleted successfully.");
+    } else {
+      console.log("No duplicates found.");
+    }
 
     console.log("Fetching Pincodes data...");
     const res = await fetch('https://raw.githubusercontent.com/mithunsasidharan/India-Pincode-Lookup/master/pincodes.json');
