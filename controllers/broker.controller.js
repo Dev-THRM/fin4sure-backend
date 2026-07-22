@@ -5,7 +5,7 @@ import Loan_type from "../models/loan_type.js";
 import Status from "../models/status.js";
 import User from "../models/user.js";
 import Borrower from "../models/borrower.js";
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 import { Op } from "sequelize";
 
 // ----------------- GETTING CLIENT DETAILS OF THE PARTNER(INDIVIDUAL) -----------------
