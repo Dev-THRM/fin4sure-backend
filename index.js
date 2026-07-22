@@ -100,14 +100,17 @@ app.get("/reset-db-now", async (req, res) => {
 
 app.get("/seed-pincodes-now", async (req, res) => {
   try {
-    const { exec } = await import("child_process");
+    const { spawn } = await import("child_process");
     const nodePath = process.execPath;
     
-    // Run asynchronously in the background so it doesn't get killed by Hostinger's 60s timeout
-    exec(`${nodePath} seed_pincodes.js`, { encoding: 'utf-8', env: process.env }, (err, stdout, stderr) => {
-      if (err) console.error("Seeder error:", err);
-      else console.log("Seeder finished successfully in the background.");
+    // Run asynchronously as a completely detached background process with ignored stdio
+    // This prevents the process from crashing due to maxBuffer overflow from console.logs!
+    const child = spawn(nodePath, ['seed_pincodes.js'], { 
+      env: process.env, 
+      detached: true,
+      stdio: 'ignore' 
     });
+    child.unref();
     
     res.send(`<h1>Seeder Started in Background!</h1><p>It is currently wiping the old data and inserting all 1.5 Lakh pincodes.</p><p>Please wait ~3 minutes before checking the app.</p>`);
   } catch (err) {
