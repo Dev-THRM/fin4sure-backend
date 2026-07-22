@@ -10,6 +10,13 @@ async function seed() {
     console.log("Connecting to the database...");
     await sequelize.authenticate();
 
+    console.log("Cleaning up any existing duplicate pincodes in the database...");
+    await sequelize.query(`
+      DELETE t1 FROM pincodes t1
+      INNER JOIN pincodes t2 
+      WHERE t1.id > t2.id AND t1.code = t2.code;
+    `);
+
     console.log("Fetching Pincodes data...");
     const res = await fetch('https://raw.githubusercontent.com/mithunsasidharan/India-Pincode-Lookup/master/pincodes.json');
     if (!res.ok) {
@@ -34,6 +41,10 @@ async function seed() {
 
     const existingCities = await City.findAll();
     existingCities.forEach(c => cityMap.set(`${c.name.toUpperCase()}_${c.district_id}`, c.id));
+
+    console.log("Loading existing pincodes to prevent duplicates...");
+    const existingPincodes = await Pincode.findAll({ attributes: ['code'] });
+    existingPincodes.forEach(p => processedPincodes.add(p.code));
 
     const pincodesToInsert = [];
     const startIndex = parseInt(process.env.START_INDEX || '0', 10);
