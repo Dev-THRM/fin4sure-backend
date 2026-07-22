@@ -101,20 +101,36 @@ app.get("/reset-db-now", async (req, res) => {
 app.get("/seed-pincodes-now", async (req, res) => {
   try {
     const { spawn } = await import("child_process");
+    const fs = await import("fs");
     const nodePath = process.execPath;
     
-    // Run asynchronously as a completely detached background process with ignored stdio
-    // This prevents the process from crashing due to maxBuffer overflow from console.logs!
+    // Open a file to capture all output and errors from the background process
+    const logFile = fs.openSync('./seeder.log', 'w');
+    
     const child = spawn(nodePath, ['seed_pincodes.js'], { 
       env: process.env, 
       detached: true,
-      stdio: 'ignore' 
+      stdio: ['ignore', logFile, logFile] 
     });
     child.unref();
     
-    res.send(`<h1>Seeder Started in Background!</h1><p>It is currently wiping the old data and inserting all 1.5 Lakh pincodes.</p><p>Please wait ~3 minutes before checking the app.</p>`);
+    res.send(`<h1>Seeder Started in Background!</h1><p>It is currently wiping the old data and inserting all 1.5 Lakh pincodes.</p><p>Check the live progress at: <a href="/seeder-log" target="_blank">/seeder-log</a></p>`);
   } catch (err) {
     res.status(500).send(`<h1>Error starting pincode seeder</h1><pre>${err.message}</pre>`);
+  }
+});
+
+app.get("/seeder-log", async (req, res) => {
+  try {
+    const fs = await import("fs");
+    if (fs.existsSync('./seeder.log')) {
+      const log = fs.readFileSync('./seeder.log', 'utf-8');
+      res.send(`<pre>${log || 'Log file is empty (Process just started or failed silently)'}</pre><script>setTimeout(() => window.location.reload(), 2000);</script>`);
+    } else {
+      res.send("<pre>Log file not created yet...</pre><script>setTimeout(() => window.location.reload(), 2000);</script>");
+    }
+  } catch (err) {
+    res.send("Error reading log: " + err.message);
   }
 });
 
