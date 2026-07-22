@@ -10,6 +10,7 @@ import lenderRouter from "./routes/lender.routes.js";
 import loanTypeRouter from "./routes/loanType.routes.js";
 import webhookRouter from "./routes/webhook.routes.js";
 import scraperRouter from "./routes/scraper.routes.js";
+import locationRouter from "./routes/location.routes.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 
@@ -66,6 +67,7 @@ app.use("/api/lenders", lenderRouter);
 app.use("/api/loan-types", loanTypeRouter);
 app.use("/api/webhooks", webhookRouter);
 app.use("/api/admin/scraper", scraperRouter);
+app.use("/api/location", locationRouter);
 
 app.get("/", (req, res) => {
   res.send("<h1>Fin4Sure Backend API is running perfectly! 🚀</h1><p>Please visit the Frontend Vercel link to view the actual website.</p>");
