@@ -77,7 +77,7 @@ export const signUpHandler = async (req, res) => {
 
 export const registerBorrowerHandler = async (req, res) => {
   try {
-      const { name, email, number, dob, gender, address, pincode, state, district, password, loanAmount, tenure, loanPurpose, loanType, 
+      const { name, email, number, dob, gender, address, pincode, state, district, city, password, loanAmount, tenure, loanPurpose, loanType, 
 selectedLenders, broker_id } = req.body;
 
       if (!name || !email || !number || !dob || !gender || !address || !pincode || !password || !loanAmount || !tenure 

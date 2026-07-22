@@ -119,6 +119,7 @@ export const registerBorrowerService = async (data) => {
     if (!pincodeRecord) {
       const stateName = (state || "Unknown State").trim();
       const districtName = (district || "Unknown District").trim();
+      const cityName = (data.city || "Unknown City").trim();
       
       const [stateObj] = await State.findOrCreate({
         where: { name: stateName },
@@ -133,7 +134,7 @@ export const registerBorrowerService = async (data) => {
       });
       
       const [cityObj] = await City.findOrCreate({
-        where: { name: "Unknown City" },
+        where: { name: cityName },
         defaults: { district_id: districtObj.id },
         transaction
       });
