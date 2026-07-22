@@ -152,7 +152,7 @@ export const registerBorrowerService = async (data) => {
       gender,
       address,
       pincode_id: pincodeRecord.id,
-      profile_status: 'Under Review'
+      profile_status: 'Active'
     }, { transaction });
 
 

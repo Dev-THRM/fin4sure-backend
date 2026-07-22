@@ -23,8 +23,9 @@ const Borrower = sequelize.define('Borrower', {
     allowNull: false
   },
   profile_status: {
-    type: DataTypes.ENUM('Completed', 'Incomplete', 'Under Review', 'Rejected'),
-    allowNull: false
+    type: DataTypes.ENUM('Active', 'Inactive', 'Completed', 'Incomplete', 'Under Review', 'Rejected'),
+    allowNull: false,
+    defaultValue: 'Active'
   }
 }, {
   tableName: 'borrowers',

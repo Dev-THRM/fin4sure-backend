@@ -152,6 +152,15 @@ const startServer = async () => {
     
     setupAssociations();
     await sequelize.authenticate(); // We do not use sync({alter: true}) to avoid the 64 keys bug.
+    
+    // Update borrowers ENUM schema automatically
+    try {
+      await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN profile_status ENUM('Active', 'Inactive', 'Completed', 'Incomplete', 'Under Review', 'Rejected') DEFAULT 'Active';");
+      console.log("Borrowers profile_status ENUM updated.");
+    } catch (err) {
+      console.log("Failed to alter borrowers table (might already be updated or not exist):", err.message);
+    }
+
     console.log("Database connected successfully");
 
     // Start the weekly loan rate scraper scheduler
