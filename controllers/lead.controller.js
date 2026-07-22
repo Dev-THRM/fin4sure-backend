@@ -12,7 +12,7 @@ import Loan_type from "../models/loan_type.js";
 export const applyLoan = async (req, res) => {
     try {
         const userId = req.user.id || req.user._id;
-        const { pan, product, dob, address, state, district, pincode, loanAmount, tenure } = req.body;
+        const { pan, product, dob, address, state, district, pincode, loanAmount, tenure, lender_id, loan_purpose } = req.body;
 
         if (!product) {
           return res.status(400).json({ message: "Product is required" });
@@ -66,10 +66,11 @@ export const applyLoan = async (req, res) => {
           borrower_id: borrower.id,
           loan_type_id: loanTypeId,
           loan_amount: loanAmount || 0,
-          loan_purpose: typeRecord ? typeRecord.name : product,
+          loan_purpose: loan_purpose || (typeRecord ? typeRecord.name : product),
           tenure: tenure || 0,
           status_id: 1, // applied
-          partner_id: null
+          partner_id: null,
+          lender_id: lender_id || null
         });
 
         return res.status(201).json({
