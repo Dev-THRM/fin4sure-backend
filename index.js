@@ -96,6 +96,18 @@ app.get("/reset-db-now", async (req, res) => {
   }
 });
 
+app.get("/seed-pincodes-now", async (req, res) => {
+  try {
+    const { execSync } = await import("child_process");
+    const nodePath = process.execPath;
+    let output = "Starting Pincode Seeding...<br/>This may take a minute.<br/><br/>";
+    output += execSync(`${nodePath} seed_pincodes.js`, { encoding: 'utf-8', env: process.env });
+    res.send(`<h1>Success!</h1><pre>${output}</pre>`);
+  } catch (err) {
+    res.status(500).send(`<h1>Error running pincode seeder</h1><pre>${err.message}\n\nSTDOUT/STDERR:\n${err.stdout || ''}\n${err.stderr || ''}</pre>`);
+  }
+});
+
 const PORT = process.env.PORT || 8000;
 
 const startServer = async () => {
