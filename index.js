@@ -100,23 +100,32 @@ app.get("/reset-db-now", async (req, res) => {
 
 app.get("/seed-pincodes-now", async (req, res) => {
   try {
-    const { spawn } = await import("child_process");
-    const fs = await import("fs");
+    const { execSync } = await import("child_process");
     const nodePath = process.execPath;
+    const startIndex = req.query.start || '0';
     
-    // Open a file to capture all output and errors from the background process
-    const logFile = fs.openSync('./seeder.log', 'w');
-    
-    const child = spawn(nodePath, ['seed_pincodes.js'], { 
-      env: process.env, 
-      detached: true,
-      stdio: ['ignore', logFile, logFile] 
+    // Run chunk synchronously (takes ~5-10 seconds for 5000 records)
+    const output = execSync(`${nodePath} seed_pincodes.js`, { 
+      encoding: 'utf-8', 
+      env: { ...process.env, START_INDEX: startIndex } 
     });
-    child.unref();
     
-    res.send(`<h1>Seeder Started in Background!</h1><p>It is currently wiping the old data and inserting all 1.5 Lakh pincodes.</p><p>Check the live progress at: <a href="/seeder-log" target="_blank">/seeder-log</a></p>`);
+    // Check for next index
+    const match = output.match(/__NEXT_INDEX__:(-?\d+)/);
+    const nextIndex = match ? parseInt(match[1], 10) : -1;
+    
+    if (nextIndex !== -1) {
+      res.send(`
+        <h1>Seeding in progress... Please do not close this tab!</h1>
+        <p>Processed up to JSON line ${nextIndex}. Automatically moving to next chunk...</p>
+        <pre>${output}</pre>
+        <meta http-equiv="refresh" content="2;url=/seed-pincodes-now?start=${nextIndex}">
+      `);
+    } else {
+      res.send(`<h1>Seeding Complete! All 1.5 Lakh pincodes inserted successfully!</h1><pre>${output}</pre>`);
+    }
   } catch (err) {
-    res.status(500).send(`<h1>Error starting pincode seeder</h1><pre>${err.message}</pre>`);
+    res.status(500).send(`<h1>Error starting pincode seeder</h1><pre>${err.message}\n\n${err.stdout || ''}\n${err.stderr || ''}</pre>`);
   }
 });
 

@@ -36,11 +36,16 @@ async function seed() {
     existingCities.forEach(c => cityMap.set(`${c.name.toUpperCase()}_${c.district_id}`, c.id));
 
     const pincodesToInsert = [];
+    const startIndex = parseInt(process.env.START_INDEX || '0', 10);
+    const limit = 5000;
+    
+    console.log(`Processing records from offset ${startIndex}...`);
+    let uniqueCount = 0;
 
-    console.log("Processing records...");
-    for (const record of data) {
+    for (let i = startIndex; i < data.length; i++) {
+      const record = data[i];
       if (!record.pincode || processedPincodes.has(record.pincode)) {
-        continue; // Skip if no pincode or we already mapped this pincode
+        continue;
       }
 
       const stateName = record.stateName ? record.stateName.trim().toUpperCase() : "UNKNOWN";
@@ -79,9 +84,12 @@ async function seed() {
         city_id: cityId
       });
       processedPincodes.add(record.pincode);
+      uniqueCount++;
 
-      if (processedPincodes.size % 1000 === 0) {
-        console.log(`Processed ${processedPincodes.size} unique pincodes...`);
+      if (uniqueCount >= limit) {
+        console.log(`Reached limit of ${limit} unique pincodes for this batch. Stopping loop at index ${i}.`);
+        process.env.NEXT_START_INDEX = i + 1;
+        break;
       }
     }
 
@@ -94,7 +102,9 @@ async function seed() {
       console.log(`Inserted chunk ${i / chunkSize + 1} of ${Math.ceil(pincodesToInsert.length / chunkSize)}`);
     }
 
-    console.log("Seeding complete!");
+    console.log("Seeding chunk complete!");
+    // Pass back the next index using process.exit code or console log
+    console.log(`__NEXT_INDEX__:${process.env.NEXT_START_INDEX || -1}`);
     process.exit(0);
   } catch (err) {
     console.error("Error during seeding:", err);
