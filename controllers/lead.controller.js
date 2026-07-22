@@ -70,7 +70,8 @@ export const applyLoan = async (req, res) => {
           tenure: tenure || 0,
           status_id: 1, // applied
           partner_id: null,
-          lender_id: lender_id || null
+          lender_id: lender_id || null,
+          client_preference: null
         });
 
         return res.status(201).json({

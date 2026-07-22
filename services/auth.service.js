@@ -190,7 +190,7 @@ export const registerBorrowerService = async (data) => {
       tenure: tenure,
       status_id: 1, // Default status e.g., 'Under Review'
       partner_id: partnerIdVal,
-      client_preference: partnerIdVal ? 'partner_routing' : 'direct_reach'
+      client_preference: partnerIdVal ? 'partner_routing' : null
     }, { transaction });
 
     // Handle Lender Applications for multiple selected lenders
