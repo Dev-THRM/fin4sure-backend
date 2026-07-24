@@ -119,6 +119,8 @@ export const referClient = async (req, res) => {
       district,
       city,
       tenure,
+      dob,
+      gender,
     } = req.body;
 
     if (!loan_type_id || !loan_amount) {
@@ -172,8 +174,8 @@ export const referClient = async (req, res) => {
       // Create new borrower profile
       const newBorrower = await Borrower.create({
         user_id: clientUser.id,
-        dob: new Date('1990-01-01'), // Default dummy DOB
-        gender: 'Other',
+        dob: dob ? new Date(dob) : new Date('1990-01-01'), // Use provided DOB or fallback
+        gender: gender || 'Other', // Use provided gender or fallback
         address: address || 'To be updated',
         pincode_id: pincodeId,
         profile_status: 'Active'
@@ -186,6 +188,16 @@ export const referClient = async (req, res) => {
         borrowerId = existingBorrower.id;
         
         let shouldSave = false;
+        
+        if (dob && (!existingBorrower.dob || existingBorrower.dob.toISOString().startsWith('1990-01-01'))) {
+          existingBorrower.dob = new Date(dob);
+          shouldSave = true;
+        }
+        if (gender && (!existingBorrower.gender || existingBorrower.gender === 'Other')) {
+          existingBorrower.gender = gender;
+          shouldSave = true;
+        }
+        
         if (address && existingBorrower.address === 'To be updated') {
           existingBorrower.address = address;
           shouldSave = true;
