@@ -289,12 +289,12 @@ export const allLeads = async (req, res) => {
 export const updateBrokerStatus = async (req, res) => {
   try {
     const { brokerId, status } = req.body;
-
-    if (!["approved", "rejected"].includes(status)) {
-      return res.status(400).json({ message: "Invalid status" });
+    let userStatus = (status || "").toLowerCase().trim();
+    if (userStatus === "approved") userStatus = "active";
+    if (userStatus === "rejected") userStatus = "inactive";
+    if (!["active", "inactive", "suspended", "pending verification"].includes(userStatus)) {
+      userStatus = "active";
     }
-
-    const userStatus = status === "approved" ? "active" : "suspended";
 
     await User.update(
       { status: userStatus },
@@ -314,9 +314,10 @@ export const updateBrokerStatus = async (req, res) => {
       name: user.name,
       email: user.email,
       number: user.mob_no,
-      status: user.status === "active" ? "approved" : "rejected"
+      status: user.status
     });
-  } catch (e) {
+  } catch (err) {
+    console.error("Update broker status error:", err);
     res.status(500).json({ message: "Failed to update broker status" });
   }
 };
