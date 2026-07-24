@@ -334,6 +334,16 @@ export const profileUpdateHandeler = async (req, res) => {
         }
         await client.save();
       }
+    } else if (updatedUser.role_id === 2) {
+      if (req.body.city) {
+        const cityName = req.body.city.trim();
+        const [cityObj] = await City.findOrCreate({ where: { name: cityName } });
+        const partner = await Partner.findOne({ where: { user_id } });
+        if (partner) {
+          partner.city_id = cityObj.id;
+          await partner.save();
+        }
+      }
     }
 
     return res.json(updatedUser);
