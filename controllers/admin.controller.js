@@ -36,43 +36,56 @@ const getBrokersList = async () => {
 
       // 1. (Legacy clients table removed)
 
-      // 2. Get referred applications to extract client details
+      // 2. Get referred applications to extract real client details
       const referredApps = partnerIdVal ? await Loan_Application.findAll({
-        where: { partner_id: partnerIdVal },
-        raw: true
+        where: { partner_id: partnerIdVal }
       }) : [];
-      console.log(`DEBUG: referredApps count for partnerIdVal=${partnerIdVal}: ${referredApps.length}`);
 
-      const clientsFromApps = referredApps.map(app => {
-        const parts = app.loan_purpose ? app.loan_purpose.split(/ \u2014 | \u2013 | - /) : [];
-        let clientName = 'Client';
-        let clientPhone = '';
-        if (parts[1]) {
-          const subParts = parts[1].split(' (');
-          clientName = subParts[0] || 'Client';
-          if (subParts[1]) {
-            clientPhone = subParts[1].replace(')', '');
+      const clientsFromApps = await Promise.all(referredApps.map(async (app) => {
+        let clientName = null;
+        let clientEmail = null;
+        let clientPhone = null;
+
+        // 1. Try fetching real client data from borrower -> user association
+        if (app.borrower_id) {
+          const borrowerObj = await Borrower.findByPk(app.borrower_id, {
+            include: [{ model: User, as: 'user' }]
+          });
+          if (borrowerObj && borrowerObj.user) {
+            clientName = borrowerObj.user.name;
+            clientEmail = borrowerObj.user.email;
+            clientPhone = borrowerObj.user.mob_no;
           }
-        } else if (app.borrower_id !== null) {
-          clientName = "Registered Client";
-        } else {
-          return null; 
         }
 
+        // 2. Fallback to loan_purpose parsing if borrower lookup failed
+        if (!clientName && app.loan_purpose) {
+          const parts = app.loan_purpose.split(/ \u2014 | \u2013 | - /);
+          if (parts[1]) {
+            const subParts = parts[1].split(' (');
+            clientName = subParts[0] ? subParts[0].trim() : null;
+            if (subParts[1]) {
+              clientPhone = subParts[1].replace(')', '').trim();
+            }
+          }
+        }
+
+        if (!clientName) return null;
+
+        // Don't show partner themselves as their own client
         if (clientName === user.name) return null;
 
         return {
           id: `app_${app.id}`,
           name: clientName,
-          email: `${clientName.toLowerCase().replace(/\s+/g, '')}@gmail.com`, 
+          email: clientEmail || `${clientName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
           number: clientPhone || "-",
           dob: "-",
           address: "-"
         };
-      }).filter(Boolean);
-      console.log(`DEBUG: broker user_id=${user.id}, clientsFromApps:`, JSON.stringify(clientsFromApps));
+      }));
 
-      const linkedClients = clientsFromApps;
+      const linkedClients = clientsFromApps.filter(Boolean);
 
       const countLeads = partnerIdVal ? await Loan_Application.count({ where: { partner_id: partnerIdVal } }) : 0;
 
