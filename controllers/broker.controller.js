@@ -241,7 +241,9 @@ export const referClient = async (req, res) => {
       status_id: 1, // pending
     });
 
+    let waCredentials = null;
     if (clientPref === 'direct_reach') {
+      waCredentials = { username: email, password: "Password@12" };
       console.log(`[WHATSAPP SIMULATION] Message to 91${number}`);
       console.log(`Your Fin4Sure account has been created.\nUsername: ${email}\nPassword: Password@12\n\nPlease log in and change your password if you want.`);
       
@@ -276,6 +278,7 @@ export const referClient = async (req, res) => {
       success: true,
       message: "Referral submitted successfully",
       application,
+      waCredentials
     });
   } catch (err) {
     console.error("Refer client error:", err);
