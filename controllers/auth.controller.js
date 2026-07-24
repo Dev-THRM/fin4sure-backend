@@ -294,12 +294,12 @@ export const profileHandler = async (req, res) => {
       email: user.email,
       number: user.mob_no,
       status: user.status,
-      city: city || undefined,
-      district: city || undefined,
+      city: city || "",
+      district: city || "",
       ...clientDetails
     });
   } catch (err) {
-    console.error(err);
+    console.error("Profile handler error:", err);
     return res.status(404).json({ message: err.message || "User not found" });
   }
 };
@@ -337,19 +337,34 @@ export const profileUpdateHandeler = async (req, res) => {
     } else if (updatedUser.role_id === 2) {
       if (req.body.city) {
         const cityName = req.body.city.trim();
-        const [cityObj] = await City.findOrCreate({ where: { name: cityName } });
-        const partner = await Partner.findOne({ where: { user_id } });
-        if (partner) {
-          partner.city_id = cityObj.id;
-          await partner.save();
+        let cityObj = await City.findOne({ where: { name: cityName } });
+        if (!cityObj) {
+          const [stateObj] = await State.findOrCreate({
+            where: { name: "Maharashtra" },
+            defaults: { country: "India" }
+          });
+          const [districtObj] = await District.findOrCreate({
+            where: { name: "Mumbai City" },
+            defaults: { state_id: stateObj.id }
+          });
+          cityObj = await City.create({
+            name: cityName,
+            district_id: districtObj.id
+          });
         }
+        const [partner] = await Partner.findOrCreate({
+          where: { user_id },
+          defaults: { city_id: cityObj.id }
+        });
+        partner.city_id = cityObj.id;
+        await partner.save();
       }
     }
 
     return res.json(updatedUser);
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: "Something went wrong" });
+    console.error("Profile update error:", err);
+    return res.status(500).json({ message: "Something went wrong updating profile: " + err.message });
   }
 };
 
