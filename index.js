@@ -146,49 +146,29 @@ app.get("/seeder-log", async (req, res) => {
 
 const PORT = process.env.PORT || 8000;
 
+// Start HTTP server immediately so Hostinger proxy binds the port without timing out
+app.listen(PORT, () => {
+  console.log(`Server is running on PORT ${PORT}`);
+});
+
 const startServer = async () => {
   try {
     await connectDB();
-    
     setupAssociations();
-    await sequelize.authenticate(); // We do not use sync({alter: true}) to avoid the 64 keys bug.
+    await sequelize.authenticate();
     
     // Update borrowers ENUM schema automatically
     try {
       await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN profile_status ENUM('Active', 'Inactive', 'Completed', 'Incomplete', 'Under Review', 'Rejected') DEFAULT 'Active';");
       console.log("Borrowers profile_status ENUM updated.");
     } catch (err) {
-      console.log("Failed to alter borrowers table (might already be updated or not exist):", err.message);
-    }
-
-    // Update loan_applications to use borrower_id instead of user_id
-    try {
-      // First check if user_id column exists before attempting to alter
-      const [results] = await sequelize.query("SHOW COLUMNS FROM loan_applications LIKE 'user_id'");
-      if (results && results.length > 0) {
-        console.log("Migrating loan_applications schema...");
-        await sequelize.query("SET FOREIGN_KEY_CHECKS = 0;");
-        await sequelize.query("TRUNCATE TABLE loan_applications;");
-        await sequelize.query("ALTER TABLE loan_applications DROP COLUMN user_id;");
-        await sequelize.query("ALTER TABLE loan_applications ADD COLUMN borrower_id INT NULL AFTER application_no;");
-        await sequelize.query("SET FOREIGN_KEY_CHECKS = 1;");
-        console.log("loan_applications schema updated successfully.");
-      }
-    } catch (err) {
-      console.log("Failed to migrate loan_applications table:", err.message);
+      console.log("Borrowers table alter notice:", err.message);
     }
 
     console.log("Database connected successfully");
-
-    // Start the weekly loan rate scraper scheduler
     startScraperScheduler();
-
-    app.listen(PORT, () => {
-      console.log(`Server is running on PORT ${PORT}`);
-    });
   } catch (error) {
-    console.error("Failed to start server", error.message);
-    process.exit(1);
+    console.error("Database initialization notice:", error.message);
   }
 };
 
