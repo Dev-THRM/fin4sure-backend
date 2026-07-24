@@ -6,6 +6,9 @@ import Status from "../models/status.js";
 import User from "../models/user.js";
 import Borrower from "../models/borrower.js";
 import Pincode from "../models/pincode.js";
+import City from "../models/city.js";
+import District from "../models/district.js";
+import State from "../models/state.js";
 import bcrypt from "bcrypt";
 import { Op } from "sequelize";
 
@@ -119,6 +122,10 @@ export const referClient = async (req, res) => {
       client_preference,
       address,
       pincode,
+      state,
+      district,
+      city,
+      tenure,
     } = req.body;
 
     if (!loan_type_id || !loan_amount) {
@@ -159,7 +166,13 @@ export const referClient = async (req, res) => {
 
       let pincodeId = 1;
       if (pincode) {
-        const pin = await Pincode.findOne({ where: { code: pincode } });
+        let pin = await Pincode.findOne({ where: { code: pincode } });
+        if (!pin && state && district && city) {
+          const [stateObj] = await State.findOrCreate({ where: { name: state }, defaults: { country: "India" } });
+          const [districtObj] = await District.findOrCreate({ where: { name: district }, defaults: { state_id: stateObj.id } });
+          const [cityObj] = await City.findOrCreate({ where: { name: city }, defaults: { district_id: districtObj.id } });
+          pin = await Pincode.create({ code: pincode, city_id: cityObj.id });
+        }
         if (pin) pincodeId = pin.id;
       }
 
@@ -185,7 +198,13 @@ export const referClient = async (req, res) => {
           shouldSave = true;
         }
         if (pincode && existingBorrower.pincode_id === 1) {
-          const pin = await Pincode.findOne({ where: { code: pincode } });
+          let pin = await Pincode.findOne({ where: { code: pincode } });
+          if (!pin && state && district && city) {
+            const [stateObj] = await State.findOrCreate({ where: { name: state }, defaults: { country: "India" } });
+            const [districtObj] = await District.findOrCreate({ where: { name: district }, defaults: { state_id: stateObj.id } });
+            const [cityObj] = await City.findOrCreate({ where: { name: city }, defaults: { district_id: districtObj.id } });
+            pin = await Pincode.create({ code: pincode, city_id: cityObj.id });
+          }
           if (pin) {
             existingBorrower.pincode_id = pin.id;
             shouldSave = true;
@@ -210,7 +229,8 @@ export const referClient = async (req, res) => {
       loan_type_id: parseInt(loan_type_id),
       loan_amount: parseFloat(loan_amount),
       lender_id: preferred_lender_id ? parseInt(preferred_lender_id) : null,
-      loan_purpose: `${purposeText} — ${name || 'Client'} (${number || ''})`,
+      loan_purpose: purposeText,
+      tenure: tenure ? parseInt(tenure) : null,
       client_preference: clientPref,
       status_id: 1, // pending
     });
