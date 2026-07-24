@@ -64,17 +64,10 @@ export const getBrokerLeads = async (req, res) => {
       });
 
       appLeads = applications.map((app) => {
-        const parts = app.loan_purpose ? app.loan_purpose.split(' — ') : [];
-        const purpose = parts[0] || 'Loan';
-        let clientName = 'Client';
-        let clientPhone = '';
-        if (parts[1]) {
-          const subParts = parts[1].split(' (');
-          clientName = subParts[0] || 'Client';
-          if (subParts[1]) {
-            clientPhone = subParts[1].replace(')', '');
-          }
-        }
+        const purpose = app.loan_purpose || 'Loan';
+        const clientName = app.Borrower?.user?.name || 'Client';
+        const clientPhone = app.Borrower?.user?.mob_no || '';
+        
         return {
           id: 'app_' + app.id,
           appId: app.id,
