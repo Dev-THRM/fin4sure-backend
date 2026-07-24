@@ -244,37 +244,36 @@ export const referClient = async (req, res) => {
       }
       borrowerId = existingBorrower.id;
         
-        let shouldSave = false;
-        
-        if (dob && (!existingBorrower.dob || existingBorrower.dob.toISOString().startsWith('1990-01-01'))) {
-          existingBorrower.dob = new Date(dob);
+      let shouldSave = false;
+      
+      if (dob && (!existingBorrower.dob || existingBorrower.dob.toISOString().startsWith('1990-01-01'))) {
+        existingBorrower.dob = new Date(dob);
+        shouldSave = true;
+      }
+      if (gender && (!existingBorrower.gender || existingBorrower.gender === 'Other')) {
+        existingBorrower.gender = validGender;
+        shouldSave = true;
+      }
+      
+      if (address && existingBorrower.address === 'To be updated') {
+        existingBorrower.address = address;
+        shouldSave = true;
+      }
+      if (pincode && existingBorrower.pincode_id === fallbackPincodeId) {
+        let pin = await Pincode.findOne({ where: { code: pincode } });
+        if (!pin && state && district && city) {
+          const [stateObj] = await State.findOrCreate({ where: { name: state }, defaults: { country: "India" } });
+          const [districtObj] = await District.findOrCreate({ where: { name: district }, defaults: { state_id: stateObj.id } });
+          const [cityObj] = await City.findOrCreate({ where: { name: city }, defaults: { district_id: districtObj.id } });
+          pin = await Pincode.create({ code: pincode, city_id: cityObj.id });
+        }
+        if (pin) {
+          existingBorrower.pincode_id = pin.id;
           shouldSave = true;
         }
-        if (gender && (!existingBorrower.gender || existingBorrower.gender === 'Other')) {
-          existingBorrower.gender = gender;
-          shouldSave = true;
-        }
-        
-        if (address && existingBorrower.address === 'To be updated') {
-          existingBorrower.address = address;
-          shouldSave = true;
-        }
-        if (pincode && existingBorrower.pincode_id === 1) {
-          let pin = await Pincode.findOne({ where: { code: pincode } });
-          if (!pin && state && district && city) {
-            const [stateObj] = await State.findOrCreate({ where: { name: state }, defaults: { country: "India" } });
-            const [districtObj] = await District.findOrCreate({ where: { name: district }, defaults: { state_id: stateObj.id } });
-            const [cityObj] = await City.findOrCreate({ where: { name: city }, defaults: { district_id: districtObj.id } });
-            pin = await Pincode.create({ code: pincode, city_id: cityObj.id });
-          }
-          if (pin) {
-            existingBorrower.pincode_id = pin.id;
-            shouldSave = true;
-          }
-        }
-        if (shouldSave) {
-          await existingBorrower.save();
-        }
+      }
+      if (shouldSave) {
+        await existingBorrower.save();
       }
     }
 
