@@ -65,14 +65,21 @@ export const getBrokerLeads = async (req, res) => {
       });
 
       appLeads = applications.map((app) => {
-        const purpose = app.loan_purpose || 'Loan';
-        const clientName = app.Borrower?.user?.name || 'Client';
+        const rawName = app.Borrower?.user?.name;
+        const clientName = (rawName && rawName.trim() !== 'Client') ? rawName.trim() : 'Borrower';
+        const loanTypeName = app.loanType?.name || app.loan_purpose || 'Personal Loan';
         const clientPhone = app.Borrower?.user?.mob_no || '';
+        
+        const titleParts = [clientName, loanTypeName];
+        if (clientPhone) titleParts.push(clientPhone);
         
         return {
           id: 'app_' + app.id,
           appId: app.id,
-          name: `${clientName} - ${purpose} - ${clientPhone}`,
+          name: titleParts.join(' - '),
+          clientName,
+          loanTypeName,
+          clientPhone,
           product: app.loanType?.name || 'Loan',
           statusName: app.Status?.name?.toLowerCase() || 'applied',
           status_id: app.status_id,
@@ -183,7 +190,16 @@ export const referClient = async (req, res) => {
       });
       borrowerId = newBorrower.id;
     } else {
-      // If user exists, find their borrower profile
+      // If user exists, update user's name & phone if missing or generic 'Client'
+      if (name && (!clientUser.name || clientUser.name === 'Client')) {
+        clientUser.name = name;
+        await clientUser.save();
+      }
+      if (number && (!clientUser.mob_no || clientUser.mob_no === '')) {
+        clientUser.mob_no = number;
+        await clientUser.save();
+      }
+      // Find their borrower profile
       const existingBorrower = await Borrower.findOne({ where: { user_id: clientUser.id } });
       if (existingBorrower) {
         borrowerId = existingBorrower.id;
