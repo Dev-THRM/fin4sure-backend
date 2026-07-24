@@ -64,22 +64,43 @@ export const getBrokerLeads = async (req, res) => {
         order: [['createdAt', 'DESC']],
       });
 
-      appLeads = applications.map((app) => {
-        const rawName = app.Borrower?.user?.name;
-        const clientName = (rawName && rawName.trim() !== 'Client') ? rawName.trim() : 'Borrower';
+      appLeads = await Promise.all(applications.map(async (app) => {
+        let clientName = app.Borrower?.user?.name;
+        let clientPhone = app.Borrower?.user?.mob_no;
+
+        // Fallback: If Borrower user is null, query User table directly
+        if (!clientName || !clientPhone) {
+          if (app.borrower_id) {
+            const b = await Borrower.findByPk(app.borrower_id, {
+              include: [{ model: User, as: 'user', attributes: ['name', 'mob_no'] }]
+            });
+            if (b && b.user) {
+              clientName = clientName || b.user.name;
+              clientPhone = clientPhone || b.user.mob_no;
+            } else {
+              const u = await User.findByPk(app.borrower_id, { attributes: ['name', 'mob_no'] });
+              if (u) {
+                clientName = clientName || u.name;
+                clientPhone = clientPhone || u.mob_no;
+              }
+            }
+          }
+        }
+
+        const finalName = (clientName && clientName.trim() !== 'Client') ? clientName.trim() : 'Borrower';
         const loanTypeName = app.loanType?.name || app.loan_purpose || 'Personal Loan';
-        const clientPhone = app.Borrower?.user?.mob_no || '';
-        
-        const titleParts = [clientName, loanTypeName];
-        if (clientPhone) titleParts.push(clientPhone);
-        
+        const finalPhone = clientPhone || '';
+
+        const titleParts = [finalName, loanTypeName];
+        if (finalPhone) titleParts.push(finalPhone);
+
         return {
           id: 'app_' + app.id,
           appId: app.id,
           name: titleParts.join(' - '),
-          clientName,
-          loanTypeName,
-          clientPhone,
+          clientName: finalName,
+          loanTypeName: loanTypeName,
+          clientPhone: finalPhone,
           product: app.loanType?.name || 'Loan',
           statusName: app.Status?.name?.toLowerCase() || 'applied',
           status_id: app.status_id,
@@ -90,7 +111,7 @@ export const getBrokerLeads = async (req, res) => {
           source: 'application',
           isApp: true
         };
-      });
+      }));
     }
 
     return res.json({
@@ -200,9 +221,18 @@ export const referClient = async (req, res) => {
         await clientUser.save();
       }
       // Find their borrower profile
-      const existingBorrower = await Borrower.findOne({ where: { user_id: clientUser.id } });
-      if (existingBorrower) {
-        borrowerId = existingBorrower.id;
+      let existingBorrower = await Borrower.findOne({ where: { user_id: clientUser.id } });
+      if (!existingBorrower) {
+        existingBorrower = await Borrower.create({
+          user_id: clientUser.id,
+          dob: dob ? new Date(dob) : new Date('1990-01-01'),
+          gender: gender || 'Other',
+          address: address || 'To be updated',
+          pincode_id: 1,
+          profile_status: 'Active'
+        });
+      }
+      borrowerId = existingBorrower.id;
         
         let shouldSave = false;
         
