@@ -188,7 +188,10 @@ export const referClient = async (req, res) => {
       // Send WhatsApp message to user (Commented out for now as per instructions)
       // await sendWhatsAppMessage(number, `Your Fin4Sure account has been created. Temporary password: Password@12. Please log in and change your password.`);
 
-      let pincodeId = 1;
+      let defaultPin = await Pincode.findOne();
+      let fallbackPincodeId = defaultPin ? defaultPin.id : 1;
+
+      let pincodeId = fallbackPincodeId;
       if (pincode) {
         let pin = await Pincode.findOne({ where: { code: pincode } });
         if (!pin && state && district && city) {
@@ -200,11 +203,13 @@ export const referClient = async (req, res) => {
         if (pin) pincodeId = pin.id;
       }
 
+      const validGender = (gender && ['male', 'female', 'other'].includes(gender.toLowerCase())) ? gender.toLowerCase() : 'other';
+
       // Create new borrower profile
       const newBorrower = await Borrower.create({
         user_id: clientUser.id,
-        dob: dob ? new Date(dob) : new Date('1990-01-01'), // Use provided DOB or fallback
-        gender: gender || 'Other', // Use provided gender or fallback
+        dob: dob ? new Date(dob) : new Date('1990-01-01'),
+        gender: validGender,
         address: address || 'To be updated',
         pincode_id: pincodeId,
         profile_status: 'Active'
@@ -220,15 +225,20 @@ export const referClient = async (req, res) => {
         clientUser.mob_no = number;
         await clientUser.save();
       }
+      const validGender = (gender && ['male', 'female', 'other'].includes(gender.toLowerCase())) ? gender.toLowerCase() : 'other';
+
       // Find their borrower profile
+      let defaultPin = await Pincode.findOne();
+      let fallbackPincodeId = defaultPin ? defaultPin.id : 1;
+
       let existingBorrower = await Borrower.findOne({ where: { user_id: clientUser.id } });
       if (!existingBorrower) {
         existingBorrower = await Borrower.create({
           user_id: clientUser.id,
           dob: dob ? new Date(dob) : new Date('1990-01-01'),
-          gender: gender || 'Other',
+          gender: validGender,
           address: address || 'To be updated',
-          pincode_id: 1,
+          pincode_id: fallbackPincodeId,
           profile_status: 'Active'
         });
       }
