@@ -242,7 +242,7 @@ export const allLeads = async (req, res) => {
     const applications = await Loan_Application.findAll({
       where: filter,
       include: [
-        { model: User, attributes: ['id', 'name', 'email', 'mob_no'] },
+        { model: Borrower, include: [{ model: User, as: 'user', attributes: ['id', 'name', 'email', 'mob_no'] }] },
         { model: LoanType, as: 'loanType', attributes: ['name', 'short_id'] },
         { model: Status, attributes: ['name'] }
       ],
@@ -257,9 +257,9 @@ export const allLeads = async (req, res) => {
       return {
         id: app.id,
         application_no: app.application_no,
-        name: app.User ? app.User.name : "Unknown",
-        email: app.User ? app.User.email : "-",
-        number: app.User ? app.User.mob_no : "-",
+        name: app.Borrower?.user ? app.Borrower?.user.name : "Unknown",
+        email: app.Borrower?.user ? app.Borrower?.user.email : "-",
+        number: app.Borrower?.user ? app.Borrower?.user.mob_no : "-",
         address: borrowerObj ? borrowerObj.address : "-",
         state: borrowerObj ? borrowerObj.state : "-",
         district: borrowerObj ? borrowerObj.district : "-",
@@ -341,7 +341,7 @@ export const updateLeadStatus = async (req, res) => {
     
     const app = await Loan_Application.findByPk(leadId, {
       include: [
-        { model: User, attributes: ['id', 'name', 'email', 'mob_no'] },
+        { model: Borrower, include: [{ model: User, as: 'user', attributes: ['id', 'name', 'email', 'mob_no'] }] },
         { model: LoanType, as: 'loanType', attributes: ['name', 'short_id'] },
         { model: Status, attributes: ['name'] }
       ]
@@ -353,9 +353,9 @@ export const updateLeadStatus = async (req, res) => {
 
     res.json({
       id: app.id,
-      name: app.User ? app.User.name : "Unknown",
-      email: app.User ? app.User.email : "-",
-      number: app.User ? app.User.mob_no : "-",
+      name: app.Borrower?.user ? app.Borrower?.user.name : "Unknown",
+      email: app.Borrower?.user ? app.Borrower?.user.email : "-",
+      number: app.Borrower?.user ? app.Borrower?.user.mob_no : "-",
       product: app.loanType ? app.loanType.name : "Home Loan",
       status: app.Status ? app.Status.name.toLowerCase() : "pending",
       source: app.partner_id ? "partner" : "direct",
@@ -400,7 +400,7 @@ export const updateApplication = async (req, res) => {
 
     const updated = await Loan_Application.findByPk(id, {
       include: [
-        { model: User, attributes: ['id', 'name', 'email', 'mob_no'] },
+        { model: Borrower, include: [{ model: User, as: 'user', attributes: ['id', 'name', 'email', 'mob_no'] }] },
         { model: LoanType, as: 'loanType', attributes: ['name', 'short_id'] },
         { model: Status, attributes: ['name'] }
       ]
@@ -542,7 +542,7 @@ export const exportData = async (req, res) => {
     if (type === "clients") {
     const data_c = await Loan_Application.findAll({
       include: [
-        { model: User, attributes: ['name', 'email', 'mob_no'] },
+        { model: Borrower, include: [{ model: User, as: 'user', attributes: ['name', 'email', 'mob_no'] }] },
         { model: Status, attributes: ['name'] },
         { model: LoanType, as: 'loanType', attributes: ['name'] }
       ]
@@ -562,9 +562,9 @@ export const exportData = async (req, res) => {
 
     const rows = data_c.map(item => ({
       app_id: item.application_no ?? `#${item.id}`,
-      name: item.User ? item.User.name : "Unknown",
-      email: item.User ? item.User.email : "-",
-      number: item.User ? item.User.mob_no : "-",
+      name: item.Borrower?.user ? item.Borrower?.user.name : "Unknown",
+      email: item.Borrower?.user ? item.Borrower?.user.email : "-",
+      number: item.Borrower?.user ? item.Borrower?.user.mob_no : "-",
       loan_type: item.loanType ? item.loanType.name : "-",
       loan_amount: item.loan_amount,
       status: item.Status ? item.Status.name : "applied",
@@ -601,7 +601,7 @@ export const exportData = async (req, res) => {
     if(type === "All") {
     const data_c = await Loan_Application.findAll({
       include: [
-        { model: User, attributes: ['name', 'email', 'mob_no'] },
+        { model: Borrower, include: [{ model: User, as: 'user', attributes: ['name', 'email', 'mob_no'] }] },
         { model: Status, attributes: ['name'] }
       ]
     });
@@ -675,9 +675,9 @@ export const exportData = async (req, res) => {
     data_c.forEach((item) => {
       const statusName = item.Status ? item.Status.name : "applied";
       const row = sheet.addRow({
-        client: item.User ? item.User.name : "Unknown",
-        email_c: item.User ? item.User.email : "-",
-        number_c: item.User ? item.User.mob_no : "-",
+        client: item.Borrower?.user ? item.Borrower?.user.name : "Unknown",
+        email_c: item.Borrower?.user ? item.Borrower?.user.email : "-",
+        number_c: item.Borrower?.user ? item.Borrower?.user.mob_no : "-",
         status_c: statusName,
         dob_c: "-",
         address_c: "-",
@@ -846,7 +846,7 @@ export const timelineActivity = async (req, res) => {
     const timeline = applications.map((app) => {
       return {
         id: app.id,
-        borrower: app.User ? app.User.name : "Unknown",
+        borrower: app.Borrower?.user ? app.Borrower?.user.name : "Unknown",
         product: app.loanType ? app.loanType.name : "Home Loan",
         status: app.Status ? app.Status.name.toLowerCase() : "pending",
         date: app.updatedAt

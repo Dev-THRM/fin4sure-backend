@@ -48,8 +48,12 @@ export const getBrokerLeads = async (req, res) => {
             attributes: ['name']
           },
           {
-            model: User,
-            attributes: ['name', 'mob_no']
+            model: Borrower,
+            include: [{
+              model: User,
+              as: 'user',
+              attributes: ['name', 'mob_no']
+            }]
           }
         ],
         order: [['createdAt', 'DESC']],
