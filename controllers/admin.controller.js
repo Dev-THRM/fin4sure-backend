@@ -795,10 +795,14 @@ export const allClients = async (req, res) => {
     
     const enrichedClients = await Promise.all(
       clients.map(async (client) => {
-        const applications = await Loan_Application.findAll({
-          where: { user_id: client.id },
-          include: [{ model: Status, attributes: ['name'] }]
-        });
+        const borrower = await Borrower.findOne({ where: { user_id: client.id } });
+        let applications = [];
+        if (borrower) {
+          applications = await Loan_Application.findAll({
+            where: { borrower_id: borrower.id },
+            include: [{ model: Status, attributes: ['name'] }]
+          });
+        }
         
         let clientStatus = 'active';
         const loanCount = applications.length;
@@ -824,7 +828,7 @@ export const allClients = async (req, res) => {
     res.json(enrichedClients);
   } catch (err) {
     console.error("All clients error:", err);
-    res.status(500).json({ message: "Failed to fetch borrowers" });
+    res.status(500).json({ message: "Failed to fetch borrowers: " + err.message });
   }
 };
 
@@ -836,7 +840,10 @@ export const timelineActivity = async (req, res) => {
     const applications = await Loan_Application.findAll({
       limit: 20,
       include: [
-        { model: User, attributes: ['name'] },
+        {
+          model: Borrower,
+          include: [{ model: User, as: 'user', attributes: ['name'] }]
+        },
         { model: LoanType, as: 'loanType', attributes: ['name'] },
         { model: Status, attributes: ['name'] }
       ],
@@ -846,7 +853,7 @@ export const timelineActivity = async (req, res) => {
     const timeline = applications.map((app) => {
       return {
         id: app.id,
-        borrower: app.Borrower?.user ? app.Borrower?.user.name : "Unknown",
+        borrower: app.Borrower?.user ? app.Borrower.user.name : "Unknown",
         product: app.loanType ? app.loanType.name : "Home Loan",
         status: app.Status ? app.Status.name.toLowerCase() : "pending",
         date: app.updatedAt
@@ -855,7 +862,7 @@ export const timelineActivity = async (req, res) => {
     res.json(timeline);
   } catch (err) {
     console.error("Timeline error:", err);
-    res.status(500).json({ message: "Failed to fetch timeline activity" });
+    res.status(500).json({ message: "Failed to fetch timeline activity: " + err.message });
   }
 };
 
