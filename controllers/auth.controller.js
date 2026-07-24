@@ -249,10 +249,13 @@ export const profileHandler = async (req, res) => {
 
     let city = "";
     if (role === "partner") {
-      const partner = await Partner.findOne({
+      let partner = await Partner.findOne({
         where: { user_id },
         include: [{ model: City, as: 'city' }]
       });
+      if (!partner) {
+        partner = await Partner.create({ user_id });
+      }
       if (partner && partner.city) {
         city = partner.city.name;
       }
