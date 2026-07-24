@@ -364,7 +364,15 @@ export const profileUpdateHandeler = async (req, res) => {
       }
     }
 
-    return res.json(updatedUser);
+    return res.json({
+      success: true,
+      message: "Profile updated successfully",
+      id: updatedUser.id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      number: updatedUser.mob_no,
+      city: req.body.city || ""
+    });
   } catch (err) {
     console.error("Profile update error:", err);
     return res.status(500).json({ message: "Something went wrong updating profile: " + err.message });
