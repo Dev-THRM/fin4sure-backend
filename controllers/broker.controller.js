@@ -5,6 +5,7 @@ import Loan_type from "../models/loan_type.js";
 import Status from "../models/status.js";
 import User from "../models/user.js";
 import Borrower from "../models/borrower.js";
+import Pincode from "../models/pincode.js";
 import bcrypt from "bcrypt";
 import { Op } from "sequelize";
 
@@ -116,6 +117,8 @@ export const referClient = async (req, res) => {
       loan_purpose,
       preferred_lender_id,
       client_preference,
+      address,
+      pincode,
     } = req.body;
 
     if (!loan_type_id || !loan_amount) {
@@ -154,13 +157,19 @@ export const referClient = async (req, res) => {
       // Send WhatsApp message to user (Commented out for now as per instructions)
       // await sendWhatsAppMessage(number, `Your Fin4Sure account has been created. Temporary password: Password@12. Please log in and change your password.`);
 
+      let pincodeId = 1;
+      if (pincode) {
+        const pin = await Pincode.findOne({ where: { code: pincode } });
+        if (pin) pincodeId = pin.id;
+      }
+
       // Create new borrower profile
       const newBorrower = await Borrower.create({
         user_id: clientUser.id,
         dob: new Date('1990-01-01'), // Default dummy DOB
         gender: 'Other',
-        address: 'To be updated',
-        pincode_id: 1, // Default dummy pincode
+        address: address || 'To be updated',
+        pincode_id: pincodeId,
         profile_status: 'Active'
       });
       borrowerId = newBorrower.id;
@@ -169,6 +178,22 @@ export const referClient = async (req, res) => {
       const existingBorrower = await Borrower.findOne({ where: { user_id: clientUser.id } });
       if (existingBorrower) {
         borrowerId = existingBorrower.id;
+        
+        let shouldSave = false;
+        if (address && existingBorrower.address === 'To be updated') {
+          existingBorrower.address = address;
+          shouldSave = true;
+        }
+        if (pincode && existingBorrower.pincode_id === 1) {
+          const pin = await Pincode.findOne({ where: { code: pincode } });
+          if (pin) {
+            existingBorrower.pincode_id = pin.id;
+            shouldSave = true;
+          }
+        }
+        if (shouldSave) {
+          await existingBorrower.save();
+        }
       }
     }
 
