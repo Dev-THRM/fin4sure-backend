@@ -70,3 +70,21 @@ export const getLocationByPincode = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const getPublicSettings = async (req, res) => {
+  try {
+    const PlatformSetting = (await import("../models/platform_settings.model.js")).default;
+    const settings = await PlatformSetting.findAll({ raw: true });
+    const settingsObj = {};
+    settings.forEach(s => {
+      settingsObj[s.key] = s.value;
+    });
+    res.status(200).json({
+      success: true,
+      announcement_banner: settingsObj.announcement_banner || "",
+      roi_disclaimer: settingsObj.roi_disclaimer || ""
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
