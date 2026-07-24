@@ -125,11 +125,11 @@ export const uploadDocs = async (req, res) => {
       });
     }
 
-    // Progress status_id to 2 (documents uploaded)
-    app.status_id = 2;
+    // Progress status_id to 3 (credit)
+    app.status_id = 3;
     await app.save();
 
-    return res.json({ message: "Documents uploaded successfully" });
+    return res.json({ message: "Documents uploaded and application progressed to Credit evaluation" });
   } catch (err) {
     console.error("Upload docs error:", err);
     return res.status(500).json({ message: "Server error during document upload" });
