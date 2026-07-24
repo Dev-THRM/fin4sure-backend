@@ -127,7 +127,7 @@ export const referClient = async (req, res) => {
     // Check if user already exists
     let clientUser = await User.findOne({ 
       where: { 
-        [Op.or]: [{ email: email }, { phone_number: number }] 
+        [Op.or]: [{ email: email }, { mob_no: number }] 
       } 
     });
 
@@ -141,10 +141,10 @@ export const referClient = async (req, res) => {
       clientUser = await User.create({
         name: name,
         email: email,
-        phone_number: number,
+        mob_no: number,
         password_hash: hashedPassword,
         role_id: 1, // Borrower role
-        status: 'Active'
+        status: 'active'
       });
 
       // Send WhatsApp message to user (Commented out for now as per instructions)
