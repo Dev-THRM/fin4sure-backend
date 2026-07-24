@@ -157,12 +157,13 @@ const startServer = async () => {
     setupAssociations();
     await sequelize.authenticate();
     
-    // Update borrowers ENUM schema automatically
+    // Update borrowers & users ENUM/column schema automatically
     try {
       await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN profile_status ENUM('Active', 'Inactive', 'Completed', 'Incomplete', 'Under Review', 'Rejected') DEFAULT 'Active';");
-      console.log("Borrowers profile_status ENUM updated.");
+      await sequelize.query("ALTER TABLE users MODIFY COLUMN status VARCHAR(255) DEFAULT 'active';");
+      console.log("Database schema updated.");
     } catch (err) {
-      console.log("Borrowers table alter notice:", err.message);
+      console.log("Database schema alter notice:", err.message);
     }
 
     console.log("Database connected successfully");

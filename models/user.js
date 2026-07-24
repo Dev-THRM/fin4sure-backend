@@ -7,7 +7,10 @@ const User = sequelize.define('User', {
   password_hash: DataTypes.STRING,
   mob_no: DataTypes.STRING,
   role_id: DataTypes.INTEGER,
-  status: DataTypes.ENUM('active', 'suspended', 'pending verification', 'draft')
+  status: {
+    type: DataTypes.STRING,
+    defaultValue: 'active'
+  }
 }, {
   tableName: 'users',
   timestamps: true,
