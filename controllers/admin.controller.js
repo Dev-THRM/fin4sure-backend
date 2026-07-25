@@ -224,10 +224,17 @@ export const allLeads = async (req, res) => {
     const applications = await Loan_Application.findAll({
       where: filter,
       order: [['createdAt', 'DESC']],
-      raw: true
+      include: [
+        { model: Borrower, include: [{ model: User, as: 'user' }] },
+        { model: Status },
+        { model: LoanType, as: 'loanType' },
+        { model: Lender, as: 'lender' },
+        { model: Partner, include: [{ model: User, as: 'user' }] }
+      ]
     });
 
-    const enrichedLeads = await Promise.all(applications.map(async (app) => {
+    const enrichedLeads = applications.map((instance) => {
+      const app = instance.get({ plain: true });
       let clientName = "Unknown Client";
       let clientEmail = "-";
       let clientPhone = "-";
@@ -236,27 +243,18 @@ export const allLeads = async (req, res) => {
       let clientDistrict = "-";
       let clientDob = "-";
 
-      if (app.borrower_id) {
-        try {
-          const borrowerObj = await Borrower.findByPk(app.borrower_id, { raw: true });
-          if (borrowerObj) {
-            clientAddress = borrowerObj.address || "-";
-            clientState = borrowerObj.state || "-";
-            clientDistrict = borrowerObj.district || "-";
-            clientDob = borrowerObj.dob || "-";
-            if (borrowerObj.user_id) {
-              const uObj = await User.findByPk(borrowerObj.user_id, { raw: true });
-              if (uObj) {
-                clientName = uObj.name || clientName;
-                clientEmail = uObj.email || clientEmail;
-                clientPhone = uObj.mob_no || clientPhone;
-              }
-            }
-          }
-        } catch (_) {}
+      if (app.Borrower) {
+        clientAddress = app.Borrower.address || "-";
+        clientState = app.Borrower.state || "-";
+        clientDistrict = app.Borrower.district || "-";
+        clientDob = app.Borrower.dob || "-";
+        if (app.Borrower.user) {
+          clientName = app.Borrower.user.name || clientName;
+          clientEmail = app.Borrower.user.email || clientEmail;
+          clientPhone = app.Borrower.user.mob_no || clientPhone;
+        }
       }
 
-      // 2. Fallback to parsing app.loan_purpose if clientName was missing
       if ((!clientName || clientName === "Unknown Client") && app.loan_purpose) {
         try {
           const lpStr = String(app.loan_purpose);
@@ -274,42 +272,23 @@ export const allLeads = async (req, res) => {
       if (!clientName) clientName = `Application #${app.id}`;
 
       let loanTypeName = "Home Loan";
-      if (app.loan_type_id) {
-        try {
-          const ltObj = await LoanType.findByPk(app.loan_type_id, { raw: true });
-          if (ltObj) loanTypeName = ltObj.name;
-        } catch (_) {}
-      }
+      if (app.loanType) loanTypeName = app.loanType.name;
 
       let statusName = "in progress";
       let stageName = "Applied";
-      if (app.status_id) {
-        try {
-          const sObj = await Status.findByPk(app.status_id, { raw: true });
-          if (sObj) {
-            statusName = sObj.name.toLowerCase();
-            stageName = sObj.name;
-          }
-        } catch (_) {}
+      if (app.Status) {
+        statusName = app.Status.name.toLowerCase();
+        stageName = app.Status.name;
       }
 
       let lenderName = "SBI";
-      if (app.lender_id) {
-        try {
-          const lObj = await Lender.findByPk(app.lender_id, { raw: true });
-          if (lObj) lenderName = lObj.short_name || lObj.name;
-        } catch (_) {}
+      if (app.lender) {
+        lenderName = app.lender.short_name || app.lender.short || app.lender.name;
       }
 
       let partnerName = null;
-      if (app.partner_id) {
-        try {
-          const pObj = await Partner.findByPk(app.partner_id, { raw: true });
-          if (pObj && pObj.user_id) {
-            const puObj = await User.findByPk(pObj.user_id, { raw: true });
-            if (puObj) partnerName = puObj.name;
-          }
-        } catch (_) {}
+      if (app.Partner && app.Partner.user) {
+        partnerName = app.Partner.user.name;
       }
 
       const formattedAppNo = app.application_no 
@@ -340,7 +319,7 @@ export const allLeads = async (req, res) => {
         createdAt: app.createdAt,
         updatedAt: app.updatedAt
       };
-    }));
+    });
 
     res.json(enrichedLeads);
   } catch (e) {
