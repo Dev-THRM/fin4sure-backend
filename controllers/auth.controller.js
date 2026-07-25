@@ -232,73 +232,77 @@ export const verifyUpdateNumberOTP = async (req, res) => {
 
 export const profileHandler = async (req, res) => {
   try {
-    const user_id = req.user._id;
+    const user_id = req.user?._id || req.user?.id;
     if (!user_id) {
       return res.status(401).json({ message: "Not authenticated" });
     }
-    const user = await profileService(user_id, req.user.role);
+    
+    let user = await User.findByPk(user_id, { raw: true });
+    if (!user) {
+      user = await Admin.findByPk(user_id, { raw: true });
+    }
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
     
     let role = "borrower";
     if (user.role_id === 2) role = "partner";
     if (user.role_id === 3) role = "admin";
 
-    let city = "";
-    if (role === "partner") {
-      let partner = await Partner.findOne({
-        where: { user_id },
-        include: [{ model: City, as: 'city' }]
-      });
-      if (!partner) {
-        partner = await Partner.create({ user_id });
-      }
-      if (partner && partner.city) {
-        city = partner.city.name;
-      }
-    }
-
     let clientDetails = {};
     if (role === "borrower") {
-      const client = await Borrower.findOne({ 
-        where: { user_id },
-        include: [{
-          model: Pincode,
-          include: [{
-            model: City,
-            include: [{
-              model: District,
-              include: [{
-                model: State
-              }]
-            }]
-          }]
-        }]
-      });
+      const client = await Borrower.findOne({ where: { user_id }, raw: true });
       if (client) {
+        let pincodeCode = "";
+        let cityName = "";
+        let districtName = "";
+        let stateName = "";
+
+        if (client.pincode_id) {
+          const pinRec = await Pincode.findByPk(client.pincode_id, { raw: true });
+          if (pinRec) {
+            pincodeCode = pinRec.code;
+            if (pinRec.city_id) {
+              const cRec = await City.findByPk(pinRec.city_id, { raw: true });
+              if (cRec) {
+                cityName = cRec.name;
+                if (cRec.district_id) {
+                  const dRec = await District.findByPk(cRec.district_id, { raw: true });
+                  if (dRec) {
+                    districtName = dRec.name;
+                    if (dRec.state_id) {
+                      const sRec = await State.findByPk(dRec.state_id, { raw: true });
+                      if (sRec) stateName = sRec.name;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
         clientDetails = {
           dob: client.dob,
           address: client.address,
-          pincode: client.Pincode?.code || "",
-          state: client.Pincode?.City?.District?.State?.name || "",
-          district: client.Pincode?.City?.District?.name || "",
-          city: client.Pincode?.City?.name || ""
+          pincode: pincodeCode,
+          state: stateName,
+          district: districtName,
+          city: cityName
         };
       }
     }
 
     return res.json({
-      id: user.id,
-      role,
+      _id: user.id,
       name: user.name,
       email: user.email,
       number: user.mob_no,
-      status: user.status,
-      city: city || "",
-      district: city || "",
+      role,
       ...clientDetails
     });
   } catch (err) {
     console.error("Profile handler error:", err);
-    return res.status(404).json({ message: err.message || "User not found" });
+    return res.status(500).json({ message: "Error loading profile", error: err.message });
   }
 };
 
