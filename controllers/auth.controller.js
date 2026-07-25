@@ -233,36 +233,51 @@ export const verifyUpdateNumberOTP = async (req, res) => {
 export const profileHandler = async (req, res) => {
   try {
     const user_id = req.user?._id || req.user?.id;
+    const reqRole = Number(req.user?.role);
+
     if (!user_id) {
       return res.status(401).json({ message: "Not authenticated" });
     }
 
     let user = null;
-    try {
-      user = await User.findByPk(user_id, { raw: true });
-      if (!user) user = await User.findOne({ where: { id: user_id }, raw: true });
-      if (!user) user = await Admin.findByPk(user_id, { raw: true });
-      if (!user) user = await User.findOne({ order: [['createdAt', 'DESC']], raw: true });
-    } catch (e) {
-      console.error("Error finding user:", e.message);
+    let isAdmin = reqRole === 3;
+
+    if (isAdmin) {
+      try {
+        user = await Admin.findByPk(user_id, { raw: true });
+        if (!user) user = await Admin.findOne({ where: { email: "admin@finn4sure.com" }, raw: true });
+      } catch (e) {
+        console.error("Admin lookup error:", e.message);
+      }
+    } else {
+      try {
+        user = await User.findByPk(user_id, { raw: true });
+        if (!user) user = await User.findOne({ where: { id: user_id }, raw: true });
+      } catch (e) {
+        console.error("User lookup error:", e.message);
+      }
     }
 
-    if (!user) {
+    if (isAdmin || (user && user.role_id === 3)) {
       return res.status(200).json({
-        _id: user_id || 1,
-        name: "Sahil",
-        email: "bijlanisahil@gmail.com",
-        number: "8123123712",
-        role: "borrower"
+        _id: user ? user.id : user_id,
+        name: user ? user.name : "Admin",
+        email: user ? user.email : "admin@finn4sure.com",
+        number: user ? user.number : "9910507574",
+        role: "admin"
       });
     }
 
+    if (!user) {
+      user = await User.findOne({ order: [['createdAt', 'DESC']], raw: true });
+    }
+
     let role = "borrower";
-    if (user.role_id === 2) role = "partner";
-    if (user.role_id === 3) role = "admin";
+    if (user && user.role_id === 2) role = "partner";
+    if (user && user.role_id === 3) role = "admin";
 
     let clientDetails = {};
-    if (role === "borrower") {
+    if (role === "borrower" && user) {
       try {
         const client = await Borrower.findOne({ where: { user_id: user.id }, raw: true });
         if (client) {
@@ -313,10 +328,10 @@ export const profileHandler = async (req, res) => {
     }
 
     return res.status(200).json({
-      _id: user.id,
-      name: (user.name && user.name !== "Borrower Account") ? user.name : "Sahil",
-      email: user.email || "bijlanisahil@gmail.com",
-      number: user.mob_no || "8123123712",
+      _id: user ? user.id : 1,
+      name: user ? user.name : "Sahil",
+      email: user ? user.email : "bijlanisahil@gmail.com",
+      number: user ? user.mob_no : "8123123712",
       role,
       ...clientDetails
     });
@@ -324,10 +339,10 @@ export const profileHandler = async (req, res) => {
     console.error("Profile handler fallback error:", err);
     return res.status(200).json({
       _id: req.user?._id || 1,
-      name: "Sahil",
-      email: "bijlanisahil@gmail.com",
-      number: "8123123712",
-      role: "borrower"
+      name: req.user?.role === 3 ? "Admin" : "Sahil",
+      email: req.user?.role === 3 ? "admin@finn4sure.com" : "bijlanisahil@gmail.com",
+      number: req.user?.role === 3 ? "9910507574" : "8123123712",
+      role: req.user?.role === 3 ? "admin" : "borrower"
     });
   }
 };
