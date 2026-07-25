@@ -63,7 +63,10 @@ export const setupAssociations = () => {
   Partner.hasMany(Loan_Application, { foreignKey: 'partner_id' });
   Loan_Application.belongsTo(Partner, { foreignKey: 'partner_id' });
 
-  City.hasMany(Partner, { foreignKey: 'city_id' });
+  Partner.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+  User.hasOne(Partner, { foreignKey: 'user_id', as: 'partner' });
+
+  City.hasMany(Partner, { foreignKey: 'city_id', as: 'city' });
 
   Status.hasMany(Loan_Application, { foreignKey: 'status_id' });
   Loan_Application.belongsTo(Status, { foreignKey: 'status_id' });
