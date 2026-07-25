@@ -278,14 +278,14 @@ export const allLeads = async (req, res) => {
 
       if (app.borrower_id) {
         try {
-          const borrowerObj = await Borrower.findByPk(app.borrower_id);
+          const borrowerObj = await Borrower.findByPk(app.borrower_id, { raw: true });
           if (borrowerObj) {
             clientAddress = borrowerObj.address || "-";
             clientState = borrowerObj.state || "-";
             clientDistrict = borrowerObj.district || "-";
             clientDob = borrowerObj.dob || "-";
             if (borrowerObj.user_id) {
-              const uObj = await User.findByPk(borrowerObj.user_id);
+              const uObj = await User.findByPk(borrowerObj.user_id, { raw: true });
               if (uObj) {
                 clientName = uObj.name || clientName;
                 clientEmail = uObj.email || clientEmail;
@@ -297,11 +297,11 @@ export const allLeads = async (req, res) => {
       }
 
       // 2. Fallback to parsing app.loan_purpose if clientName was missing
-      if (!clientName && app.loan_purpose) {
+      if ((!clientName || clientName === "Unknown Client") && app.loan_purpose) {
         const parts = app.loan_purpose.split(/ \u2014 | \u2013 | - /);
         if (parts[1]) {
           const subParts = parts[1].split(' (');
-          clientName = subParts[0] ? subParts[0].trim() : null;
+          clientName = subParts[0] ? subParts[0].trim() : clientName;
           if (subParts[1]) {
             clientPhone = subParts[1].replace(')', '').trim();
           }
@@ -313,7 +313,7 @@ export const allLeads = async (req, res) => {
       let loanTypeName = "Home Loan";
       if (app.loan_type_id) {
         try {
-          const ltObj = await LoanType.findByPk(app.loan_type_id);
+          const ltObj = await LoanType.findByPk(app.loan_type_id, { raw: true });
           if (ltObj) loanTypeName = ltObj.name;
         } catch (_) {}
       }
@@ -322,7 +322,7 @@ export const allLeads = async (req, res) => {
       let stageName = "Applied";
       if (app.status_id) {
         try {
-          const sObj = await Status.findByPk(app.status_id);
+          const sObj = await Status.findByPk(app.status_id, { raw: true });
           if (sObj) {
             statusName = sObj.name.toLowerCase();
             stageName = sObj.name;
@@ -333,7 +333,7 @@ export const allLeads = async (req, res) => {
       let lenderName = "SBI";
       if (app.lender_id) {
         try {
-          const lObj = await Lender.findByPk(app.lender_id);
+          const lObj = await Lender.findByPk(app.lender_id, { raw: true });
           if (lObj) lenderName = lObj.short_name || lObj.name;
         } catch (_) {}
       }
@@ -341,9 +341,9 @@ export const allLeads = async (req, res) => {
       let partnerName = null;
       if (app.partner_id) {
         try {
-          const pObj = await Partner.findByPk(app.partner_id);
+          const pObj = await Partner.findByPk(app.partner_id, { raw: true });
           if (pObj && pObj.user_id) {
-            const puObj = await User.findByPk(pObj.user_id);
+            const puObj = await User.findByPk(pObj.user_id, { raw: true });
             if (puObj) partnerName = puObj.name;
           }
         } catch (_) {}
