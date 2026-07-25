@@ -56,15 +56,7 @@ export const getMyApplications = async (req, res) => {
 
     // Find all borrowers associated with this user
     const borrowers = await Borrower.findAll({ where: { user_id: userId }, raw: true });
-    let borrowerIds = borrowers.map(b => b.id);
-
-    if (borrowerIds.length === 0) {
-      const userObj = await User.findByPk(userId, { raw: true });
-      if (userObj && userObj.number) {
-        const altBorrowers = await Borrower.findAll({ where: { phone_number: userObj.number }, raw: true });
-        borrowerIds = altBorrowers.map(b => b.id);
-      }
-    }
+    const borrowerIds = borrowers.map(b => b.id);
 
     if (borrowerIds.length === 0) return res.json([]);
 

@@ -147,14 +147,15 @@ export const registerBorrowerService = async (data) => {
 
     let targetBorrower = await Borrower.findOne({ where: { user_id: targetUser.id }, transaction });
     if (!targetBorrower) {
+      if (!pincodeRecord) {
+        pincodeRecord = await Pincode.findOne({ transaction });
+      }
       targetBorrower = await Borrower.create({
         user_id: targetUser.id,
-        phone_number: number || targetUser.mob_no,
-        borrower_id: `BRW-${Date.now().toString().slice(-6)}`,
         dob: dob ? new Date(dob) : new Date("1995-01-01"),
         gender: gender || "male",
         address: address || "Main Street",
-        pincode_id: pincodeRecord ? pincodeRecord.id : null,
+        pincode_id: pincodeRecord ? pincodeRecord.id : 1,
         profile_status: 'Active'
       }, { transaction });
     }
