@@ -126,80 +126,36 @@ export const userCount = async (req, res) => {
   try {
     const totalClients = await User.count({ where: { role_id: 1 } });
     const totalBrokers = await User.count({ where: { role_id: 2 } });
-
     const approvedBrokers = await User.count({ where: { role_id: 2, status: "active" } });
     const pendingBrokers = await User.count({ where: { role_id: 2, status: "pending verification" } });
     const totalLenders = await Lender.count();
-
-    // Application status counts from real DB
     const totalApplications = await Loan_Application.count();
 
-    const inProgressStatuses = await sequelize.query(`
-      SELECT COUNT(la.id) as count
-      FROM loan_applications la
-      JOIN statuses s ON la.status_id = s.id
-      WHERE s.name IN ('applied','docs','credit','submitted','sanction','legal','in-progress')
-    `, { type: sequelize.QueryTypes.SELECT });
-    const inProgressCount = parseInt(inProgressStatuses[0]?.count || 0);
+    let inProgressCount = 0;
+    let completedCount = 0;
+    let rejectedCount = 0;
+    let loanVolume = 0;
+    let disbursedAmount = 0;
 
-    const completedStatuses = await sequelize.query(`
-      SELECT COUNT(la.id) as count
-      FROM loan_applications la
-      JOIN statuses s ON la.status_id = s.id
-      WHERE s.name IN ('disbursed', 'completed')
-    `, { type: sequelize.QueryTypes.SELECT });
-    const completedCount = parseInt(completedStatuses[0]?.count || 0);
+    try {
+      const allApps = await Loan_Application.findAll({ raw: true });
+      loanVolume = allApps.reduce((acc, curr) => acc + (parseFloat(curr.loan_amount) || 0), 0);
 
-    const rejectedStatuses = await sequelize.query(`
-      SELECT COUNT(la.id) as count
-      FROM loan_applications la
-      JOIN statuses s ON la.status_id = s.id
-      WHERE s.name = 'rejected'
-    `, { type: sequelize.QueryTypes.SELECT });
-    const rejectedCount = parseInt(rejectedStatuses[0]?.count || 0);
+      const allStatuses = await Status.findAll({ raw: true });
+      const statusMap = new Map(allStatuses.map(s => [s.id, s.name ? s.name.toLowerCase() : '']));
 
-    // Total loan volume
-    const loanVolumeResult = await sequelize.query(`
-      SELECT COALESCE(SUM(loan_amount), 0) as total_volume FROM loan_applications
-    `, { type: sequelize.QueryTypes.SELECT });
-    const loanVolume = parseFloat(loanVolumeResult[0]?.total_volume || 0);
-
-    // Disbursed amount (sum of disbursed apps)
-    const disbursedAmountResult = await sequelize.query(`
-      SELECT COALESCE(SUM(la.loan_amount), 0) as disbursed_amount
-      FROM loan_applications la
-      JOIN statuses s ON la.status_id = s.id
-      WHERE s.name IN ('disbursed', 'completed')
-    `, { type: sequelize.QueryTypes.SELECT });
-    const disbursedAmount = parseFloat(disbursedAmountResult[0]?.disbursed_amount || 0);
-
-    // Active borrowers = clients with no loans, or at least one loan that is not disbursed/completed/rejected
-    const activeBorrowersResult = await sequelize.query(`
-      SELECT COUNT(DISTINCT c.id) as count 
-      FROM users c
-      LEFT JOIN borrowers b ON c.id = b.user_id
-      WHERE c.role_id = 1 AND (
-        b.id IS NULL OR
-        NOT EXISTS (
-          SELECT 1 FROM loan_applications la WHERE la.borrower_id = b.id
-        ) OR EXISTS (
-          SELECT 1 FROM loan_applications la
-          INNER JOIN statuses s ON la.status_id = s.id
-          WHERE la.borrower_id = b.id AND s.name NOT IN ('disbursed', 'completed', 'rejected')
-        )
-      )
-    `, { type: sequelize.QueryTypes.SELECT });
-    const activeBorrowers = parseInt(activeBorrowersResult[0]?.count || 0);
-
-    const topLenders = await sequelize.query(`
-      SELECT l.name, COUNT(la.id) as count, l.type
-      FROM lender_applications la
-      JOIN lender_loan_rates r ON la.lender_rate_id = r.id
-      JOIN lenders l ON r.lender_id = l.id
-      GROUP BY l.id, l.name, l.type
-      ORDER BY count DESC
-      LIMIT 5
-    `, { type: sequelize.QueryTypes.SELECT });
+      for (const app of allApps) {
+        const stName = statusMap.get(app.status_id) || 'applied';
+        if (['disbursed', 'completed'].includes(stName)) {
+          completedCount++;
+          disbursedAmount += (parseFloat(app.loan_amount) || 0);
+        } else if (stName === 'rejected') {
+          rejectedCount++;
+        } else {
+          inProgressCount++;
+        }
+      }
+    } catch (_) {}
 
     res.json({
       totalUsers: totalClients + totalBrokers,
@@ -214,12 +170,13 @@ export const userCount = async (req, res) => {
       rejectedCount,
       loanVolume,
       disbursedAmount,
-      activeBorrowers,
-      topLenders
+      activeBorrowers: totalClients,
+      activePartners: approvedBrokers,
+      topLenders: []
     });
   } catch (e) {
     console.error("userCount error:", e);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ message: "Failed to fetch user count" });
   }
 };
 
