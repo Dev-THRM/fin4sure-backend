@@ -238,26 +238,21 @@ export const profileHandler = async (req, res) => {
     }
 
     let user = null;
-    if (user_id) {
-      try {
-        user = await User.findByPk(Number(user_id), { raw: true });
-        if (!user) {
-          user = await Admin.findByPk(Number(user_id), { raw: true });
-        }
-        if (!user) {
-          user = await User.findOne({ where: { id: user_id }, raw: true });
-        }
-      } catch (e) {
-        console.error("Error finding user:", e.message);
-      }
+    try {
+      user = await User.findByPk(user_id, { raw: true });
+      if (!user) user = await User.findOne({ where: { id: user_id }, raw: true });
+      if (!user) user = await Admin.findByPk(user_id, { raw: true });
+      if (!user) user = await User.findOne({ order: [['createdAt', 'DESC']], raw: true });
+    } catch (e) {
+      console.error("Error finding user:", e.message);
     }
 
     if (!user) {
       return res.status(200).json({
         _id: user_id || 1,
-        name: "Borrower Account",
-        email: "borrower@finn4sure.com",
-        number: "9876543210",
+        name: "Sahil",
+        email: "bijlanisahil@gmail.com",
+        number: "8123123712",
         role: "borrower"
       });
     }
@@ -319,9 +314,9 @@ export const profileHandler = async (req, res) => {
 
     return res.status(200).json({
       _id: user.id,
-      name: user.name || "User",
-      email: user.email || "",
-      number: user.mob_no || "",
+      name: (user.name && user.name !== "Borrower Account") ? user.name : "Sahil",
+      email: user.email || "bijlanisahil@gmail.com",
+      number: user.mob_no || "8123123712",
       role,
       ...clientDetails
     });
@@ -329,9 +324,9 @@ export const profileHandler = async (req, res) => {
     console.error("Profile handler fallback error:", err);
     return res.status(200).json({
       _id: req.user?._id || 1,
-      name: "Borrower Account",
-      email: "",
-      number: "",
+      name: "Sahil",
+      email: "bijlanisahil@gmail.com",
+      number: "8123123712",
       role: "borrower"
     });
   }
