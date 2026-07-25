@@ -60,14 +60,15 @@ export const applyLoan = async (req, res) => {
         
         let borrower = await Borrower.findOne({ where: { user_id: userId } });
         if (!borrower) {
+          let pincodeRec = await Pincode.findOne({ where: { code: pincode || "110001" } });
+          let pincodeId = pincodeRec ? pincodeRec.id : 1;
+
           borrower = await Borrower.create({
             user_id: userId,
-            phone_number: client.number || "9876543210",
-            borrower_id: `BRW-${Date.now().toString().slice(-6)}`,
-            dob: dob || client.dob || "1995-01-01",
+            dob: dob ? new Date(dob) : new Date("1995-01-01"),
             gender: "male",
             address: address || client.address || "Main Address",
-            pincode: pincode || client.pincode || "110001",
+            pincode_id: pincodeId,
             profile_status: "Active"
           });
         }

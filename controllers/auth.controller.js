@@ -80,15 +80,14 @@ export const signUpHandler = async (req, res) => {
 
 export const registerBorrowerHandler = async (req, res) => {
   try {
-      const { name, email, number, dob, gender, address, pincode, state, district, city, password, loanAmount, tenure, loanPurpose, loanType, 
-selectedLenders, broker_id } = req.body;
+    const { name, email, number, loanAmount, tenure, loanType } = req.body;
 
-      if (!name || !email || !number || !dob || !gender || !address || !pincode || !password || !loanAmount || !tenure 
-|| !loanPurpose || !loanType || !selectedLenders || selectedLenders.length === 0) {
-      return res.status(400).json({ message: "All fields are required" });
+    if (!email || !number) {
+      return res.status(400).json({ message: "Email and Mobile number are required" });
     }
 
-    const { user, borrower, accessToken } = await registerBorrowerService(req.body);
+    const result = await registerBorrowerService(req.body);
+    const { user, borrower, accessToken, applicationId } = result;
 
     return res
       .cookie("AccessToken", accessToken, {
@@ -98,7 +97,8 @@ selectedLenders, broker_id } = req.body;
         maxAge: 24 * 60 * 60 * 1000,
       })
       .json({
-        message: "Borrower created successfully",
+        message: "Application submitted successfully",
+        applicationId: applicationId || borrower?.id,
         _id: user.id,
         name: user.name,
         email: user.email,
@@ -106,12 +106,7 @@ selectedLenders, broker_id } = req.body;
       });
   } catch (err) {
     console.error("Register Borrower error:", err.message);
-    console.error("Register Borrower SQL error:", err.parent?.message || err.original?.message || "no SQL error");
-    console.error("Register Borrower stack:", err.stack);
-    if (err.message === "User already exists") {
-      return res.status(409).json({ message: err.message });
-    }
-    return res.status(500).json({ message: "Internal server error", error: err.message, sql: err.parent?.message });
+    return res.status(500).json({ message: err.message || "Internal server error" });
   }
 };
 
