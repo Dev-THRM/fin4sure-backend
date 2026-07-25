@@ -481,50 +481,124 @@ export const updateLeadStatus = async (req, res) => {
 export const updateApplication = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, loan_amount, tenure, loan_purpose, loan_type_id } = req.body;
+    const { status, stage, name, lender, loan_amount, tenure, loan_purpose, remark } = req.body;
 
     const app = await Loan_Application.findByPk(id);
     if (!app) return res.status(404).json({ message: "Application not found" });
 
-    // Resolve status_id from status name if provided
+    // 1. Resolve status_id from stage or status name if provided
+    let targetStatusName = stage || status;
     let status_id = app.status_id;
-    if (status) {
-      const statusObj = await Status.findOne({ where: { name: status } });
-      if (!statusObj) return res.status(400).json({ message: `Unknown status: ${status}` });
-      status_id = statusObj.id;
+    if (targetStatusName) {
+      try {
+        const sObj = await Status.findOne({
+          where: sequelize.where(
+            sequelize.fn('LOWER', sequelize.col('name')),
+            targetStatusName.toLowerCase().trim()
+          )
+        });
+        if (sObj) status_id = sObj.id;
+      } catch (_) {}
     }
 
+    // 2. Resolve lender_id from lender name if provided
+    let lender_id = app.lender_id;
+    if (lender) {
+      try {
+        const lObj = await Lender.findOne({
+          where: {
+            name: lender
+          }
+        });
+        if (lObj) lender_id = lObj.id;
+      } catch (_) {}
+    }
+
+    // 3. Update borrower/user name if provided
+    if (name && app.borrower_id) {
+      try {
+        const bObj = await Borrower.findByPk(app.borrower_id);
+        if (bObj && bObj.user_id) {
+          await User.update({ name }, { where: { id: bObj.user_id } });
+        }
+      } catch (_) {}
+    }
+
+    // 4. Perform update on Loan_Application
     await app.update({
       status_id,
-      loan_amount: loan_amount !== undefined ? parseFloat(loan_amount) : app.loan_amount,
-      tenure: tenure !== undefined ? parseInt(tenure) : app.tenure,
-      loan_purpose: loan_purpose !== undefined ? loan_purpose : app.loan_purpose,
-      loan_type_id: loan_type_id !== undefined ? parseInt(loan_type_id) : app.loan_type_id,
+      lender_id,
+      loan_amount: loan_amount !== undefined && loan_amount !== "" ? parseFloat(loan_amount) : app.loan_amount,
+      tenure: tenure !== undefined && tenure !== "" ? parseInt(tenure) : app.tenure,
+      loan_purpose: remark !== undefined ? remark : (loan_purpose !== undefined ? loan_purpose : app.loan_purpose),
     });
 
-    const updated = await Loan_Application.findByPk(id, {
-      include: [
-        { model: Borrower, include: [{ model: User, as: 'user', attributes: ['id', 'name', 'email', 'mob_no'] }] },
-        { model: LoanType, as: 'loanType', attributes: ['name', 'short_id'] },
-        { model: Status, attributes: ['name'] }
-      ]
-    });
+    // 5. Build enriched response with raw lookups
+    let clientName = name || "Unknown Client";
+    let clientEmail = "-";
+    let clientPhone = "-";
+
+    if (app.borrower_id) {
+      try {
+        const borrowerObj = await Borrower.findByPk(app.borrower_id, { raw: true });
+        if (borrowerObj && borrowerObj.user_id) {
+          const uObj = await User.findByPk(borrowerObj.user_id, { raw: true });
+          if (uObj) {
+            clientName = uObj.name;
+            clientEmail = uObj.email || "-";
+            clientPhone = uObj.mob_no || "-";
+          }
+        }
+      } catch (_) {}
+    }
+
+    let loanTypeName = "Home Loan";
+    if (app.loan_type_id) {
+      try {
+        const ltObj = await LoanType.findByPk(app.loan_type_id, { raw: true });
+        if (ltObj) loanTypeName = ltObj.name;
+      } catch (_) {}
+    }
+
+    let finalStatusName = "in progress";
+    let finalStageName = "Applied";
+    if (app.status_id) {
+      try {
+        const sObj = await Status.findByPk(app.status_id, { raw: true });
+        if (sObj) {
+          finalStatusName = sObj.name.toLowerCase();
+          finalStageName = sObj.name;
+        }
+      } catch (_) {}
+    }
+
+    let finalLenderName = lender || "SBI";
+    if (app.lender_id) {
+      try {
+        const lObj = await Lender.findByPk(app.lender_id, { raw: true });
+        if (lObj) finalLenderName = lObj.short_name || lObj.name;
+      } catch (_) {}
+    }
+
+    const formattedAppNo = app.application_no 
+      ? (String(app.application_no).startsWith('F4S') ? app.application_no : `F4S-${app.application_no}`) 
+      : `F4S-${2000 + app.id}`;
 
     return res.json({
-      id: updated.id,
-      application_no: updated.application_no,
-      name: updated.User ? updated.User.name : "Unknown",
-      email: updated.User ? updated.User.email : "-",
-      number: updated.User ? updated.User.mob_no : "-",
-      product: updated.loanType ? updated.loanType.name : "Home Loan",
-      loan_type_id: updated.loan_type_id,
-      status: updated.Status ? updated.Status.name.toLowerCase() : "applied",
-      source: updated.client_preference === 'partner_routing' ? "Partner" : "Direct",
-      loan_amount: updated.loan_amount,
-      tenure: updated.tenure,
-      loan_purpose: updated.loan_purpose,
-      createdAt: updated.createdAt,
-      updatedAt: updated.updatedAt,
+      id: app.id,
+      application_no: formattedAppNo,
+      name: clientName,
+      email: clientEmail,
+      number: clientPhone,
+      product: loanTypeName,
+      status: finalStatusName,
+      stage: finalStageName,
+      lender: finalLenderName,
+      loan_amount: app.loan_amount,
+      tenure: app.tenure,
+      loan_purpose: app.loan_purpose,
+      createdAt: app.createdAt,
+      updatedAt: app.updatedAt,
     });
   } catch (e) {
     console.error("updateApplication error:", e);
