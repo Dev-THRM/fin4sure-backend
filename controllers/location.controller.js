@@ -35,30 +35,28 @@ export const getCities = async (req, res) => {
 export const getLocationByPincode = async (req, res) => {
   try {
     const { pincode } = req.params;
-    const pincodeRecord = await Pincode.findOne({
-      where: { code: pincode },
-      include: [
-        {
-          model: City,
-          include: [
-            {
-              model: District,
-              include: [State]
-            }
-          ]
-        }
-      ]
-    });
+    const pincodeRecord = await Pincode.findOne({ where: { code: pincode }, raw: true });
 
     if (!pincodeRecord) {
-      return res.status(404).json({ success: false, message: 'Pincode not found' });
+      return res.status(200).json({ success: false, data: null, message: 'Pincode not found' });
     }
 
-    const city = pincodeRecord.City;
-    const district = city.District;
-    const state = district.State;
+    const city = await City.findByPk(pincodeRecord.city_id, { raw: true });
+    if (!city) {
+      return res.status(200).json({ success: false, data: null, message: 'City not found' });
+    }
 
-    res.status(200).json({
+    const district = await District.findByPk(city.district_id, { raw: true });
+    if (!district) {
+      return res.status(200).json({ success: false, data: null, message: 'District not found' });
+    }
+
+    const state = await State.findByPk(district.state_id, { raw: true });
+    if (!state) {
+      return res.status(200).json({ success: false, data: null, message: 'State not found' });
+    }
+
+    return res.status(200).json({
       success: true,
       data: {
         city: { id: city.id, name: city.name },
@@ -67,7 +65,7 @@ export const getLocationByPincode = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(200).json({ success: false, data: null, message: error.message });
   }
 };
 

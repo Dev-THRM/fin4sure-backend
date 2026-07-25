@@ -53,21 +53,35 @@ export const applyProduct = async (req, res) => {
 export const getMyApplications = async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
-    const borrower = await Borrower.findOne({ where: { user_id: userId } });
+    const borrower = await Borrower.findOne({ where: { user_id: userId }, raw: true });
     if (!borrower) return res.json([]);
 
     const applications = await Loan_Application.findAll({
       where: { borrower_id: borrower.id },
-      include: [
-        { model: Status, attributes: ['name'] },
-        { model: Loan_type, attributes: ['name', 'short_id'] }
-      ],
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'DESC']],
+      raw: true
     });
-    return res.json(applications);
+
+    const allStatuses = await Status.findAll({ raw: true });
+    const statusMap = new Map(allStatuses.map(s => [s.id, s.name]));
+
+    const allLoanTypes = await Loan_type.findAll({ raw: true });
+    const loanTypeMap = new Map(allLoanTypes.map(lt => [lt.id, lt]));
+
+    const enrichedApps = applications.map(app => {
+      const stName = statusMap.get(app.status_id) || "applied";
+      const ltObj = loanTypeMap.get(app.loan_type_id) || { name: "Home Loan", short_id: "home" };
+      return {
+        ...app,
+        Status: { name: stName },
+        Loan_type: ltObj
+      };
+    });
+
+    return res.json(enrichedApps);
   } catch (err) {
     console.error("Get my applications error:", err);
-    return res.status(500).json({ message: "Server error", error: err.message, sql: err.original?.message });
+    return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
