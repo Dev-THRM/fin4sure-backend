@@ -227,13 +227,11 @@ export const allLeads = async (req, res) => {
       include: [
         { model: Borrower, include: [{ model: User, as: 'user' }] },
         { model: Status },
-        { model: LoanType, as: 'loanType' },
-        { model: Lender, as: 'lender' },
-        { model: Partner, include: [{ model: User, as: 'user' }] }
+        { model: LoanType, as: 'loanType' }
       ]
     });
 
-    const enrichedLeads = applications.map((instance) => {
+    const enrichedLeads = await Promise.all(applications.map(async (instance) => {
       const app = instance.get({ plain: true });
       let clientName = "Unknown Client";
       let clientEmail = "-";
@@ -282,13 +280,22 @@ export const allLeads = async (req, res) => {
       }
 
       let lenderName = "SBI";
-      if (app.lender) {
-        lenderName = app.lender.short_name || app.lender.short || app.lender.name;
+      if (app.lender_id) {
+        try {
+          const lObj = await Lender.findByPk(app.lender_id, { raw: true });
+          if (lObj) lenderName = lObj.short_name || lObj.name;
+        } catch (_) {}
       }
 
       let partnerName = null;
-      if (app.Partner && app.Partner.user) {
-        partnerName = app.Partner.user.name;
+      if (app.partner_id) {
+        try {
+          const pObj = await Partner.findByPk(app.partner_id, { raw: true });
+          if (pObj && pObj.user_id) {
+            const puObj = await User.findByPk(pObj.user_id, { raw: true });
+            if (puObj) partnerName = puObj.name;
+          }
+        } catch (_) {}
       }
 
       const formattedAppNo = app.application_no 
@@ -319,7 +326,7 @@ export const allLeads = async (req, res) => {
         createdAt: app.createdAt,
         updatedAt: app.updatedAt
       };
-    });
+    }));
 
     res.json(enrichedLeads);
   } catch (e) {
