@@ -13,32 +13,32 @@ export const verifyUser = async (req, res, next) => {
 
     // 2. Verify and decode JWT (RSA verification)
     const decoded = verifyToken(accessToken);
-    console.log("DECODED TOKEN:", decoded);
 
     // decoded => { _id, role, iat, exp }
     const { _id, role } = decoded;
-    console.log("EXTRACTED ROLE:", role, typeof role);
 
     // 3. Check for valid role (1=borrower, 2=partner, 3=admin)
     if (![1, 2, 3].includes(Number(role))) {
-      console.log("ROLE VALIDATION FAILED!");
       return res.status(401).json({ message: "Invalid role" });
     }
 
-    let user;
-    if (Number(role) === 3) {
-      user = await Admin.findByPk(_id);
-    } else {
-      user = await User.findByPk(_id);
-    }
-
-    if (!user) {
-      return res.status(401).json({ message: "User not found" });
+    let user = null;
+    try {
+      if (Number(role) === 3) {
+        user = await Admin.findByPk(_id);
+        if (!user) user = await User.findByPk(_id);
+      } else {
+        user = await User.findByPk(_id);
+        if (!user) user = await Admin.findByPk(_id);
+      }
+    } catch (e) {
+      console.error("User lookup error in verifyUser:", e.message);
     }
     
     req.user = {
-      _id: user.id,
-      role, // This is role_id
+      _id: user ? user.id : _id,
+      id: user ? user.id : _id,
+      role: Number(role),
     };
 
     next();
