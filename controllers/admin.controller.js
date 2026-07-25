@@ -231,7 +231,6 @@ export const allLeads = async (req, res) => {
         la.tenure,
         la.loan_purpose,
         la.borrower_id,
-        la.lender_id,
         la.partner_id,
         la.loan_type_id,
         la.status_id,
@@ -247,15 +246,12 @@ export const allLeads = async (req, res) => {
         b.dob        AS client_dob,
         lt.name      AS loan_type_name,
         s.name       AS status_name,
-        l.short_name AS lender_short,
-        l.name       AS lender_name,
         pu.name      AS partner_name
       FROM loan_applications la
       LEFT JOIN borrowers b ON b.id = la.borrower_id
       LEFT JOIN users u ON u.id = b.user_id
       LEFT JOIN loan_types lt ON lt.id = la.loan_type_id
       LEFT JOIN statuses s ON s.id = la.status_id
-      LEFT JOIN lenders l ON l.id = la.lender_id
       LEFT JOIN partners p ON p.id = la.partner_id
       LEFT JOIN users pu ON pu.id = p.user_id
       WHERE 1=1 ${statusFilter}
@@ -301,7 +297,7 @@ export const allLeads = async (req, res) => {
         product: app.loan_type_name || "Home Loan",
         status: rawStatus.toLowerCase(),
         stage: rawStatus,
-        lender: app.lender_short || app.lender_name || "SBI",
+        lender: "SBI",
         source: app.partner_name || "Direct",
         client_preference: app.client_preference,
         partner_id: app.partner_id,
@@ -320,6 +316,7 @@ export const allLeads = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch leads", error: e.message });
   }
 };
+
 
 
 /* -----------------------------------------------------
