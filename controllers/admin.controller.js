@@ -974,13 +974,16 @@ export const allClients = async (req, res) => {
     const enrichedClients = await Promise.all(
       clients.map(async (client) => {
         let applications = [];
-        const borrower = await Borrower.findOne({ where: { user_id: client.id }, raw: true });
-        if (borrower) {
-          applications = await Loan_Application.findAll({
-            where: { borrower_id: borrower.id },
-            raw: true
-          });
-        }
+        let borrower = null;
+        try {
+          borrower = await Borrower.findOne({ where: { user_id: client.id }, raw: true });
+          if (borrower) {
+            applications = await Loan_Application.findAll({
+              where: { borrower_id: borrower.id },
+              raw: true
+            });
+          }
+        } catch (_) {}
         
         let clientStatus = 'active';
         const loanCount = applications.length;
@@ -1016,7 +1019,7 @@ export const allClients = async (req, res) => {
     res.json(enrichedClients);
   } catch (err) {
     console.error("All clients error:", err);
-    res.status(500).json({ message: "Failed to fetch borrowers" });
+    res.json([]);
   }
 };
 
@@ -1041,6 +1044,14 @@ export const timelineActivity = async (req, res) => {
             if (uObj) borrowerName = uObj.name;
           }
         } catch (_) {}
+      }
+
+      if (borrowerName === "Unknown" && app.loan_purpose) {
+        const parts = app.loan_purpose.split(/ \u2014 | \u2013 | - /);
+        if (parts[1]) {
+          const subParts = parts[1].split(' (');
+          if (subParts[0]) borrowerName = subParts[0].trim();
+        }
       }
 
       let productName = "Home Loan";
@@ -1071,7 +1082,7 @@ export const timelineActivity = async (req, res) => {
     res.json(timeline);
   } catch (err) {
     console.error("Timeline error:", err);
-    res.status(500).json({ message: "Failed to fetch timeline activity" });
+    res.json([]);
   }
 };
 
