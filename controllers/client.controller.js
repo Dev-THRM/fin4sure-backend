@@ -53,11 +53,23 @@ export const applyProduct = async (req, res) => {
 export const getMyApplications = async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
-    const borrower = await Borrower.findOne({ where: { user_id: userId }, raw: true });
-    if (!borrower) return res.json([]);
+
+    // Find all borrowers associated with this user
+    const borrowers = await Borrower.findAll({ where: { user_id: userId }, raw: true });
+    let borrowerIds = borrowers.map(b => b.id);
+
+    if (borrowerIds.length === 0) {
+      const userObj = await User.findByPk(userId, { raw: true });
+      if (userObj && userObj.number) {
+        const altBorrowers = await Borrower.findAll({ where: { phone_number: userObj.number }, raw: true });
+        borrowerIds = altBorrowers.map(b => b.id);
+      }
+    }
+
+    if (borrowerIds.length === 0) return res.json([]);
 
     const applications = await Loan_Application.findAll({
-      where: { borrower_id: borrower.id },
+      where: { borrower_id: borrowerIds },
       order: [['createdAt', 'DESC']],
       raw: true
     });
