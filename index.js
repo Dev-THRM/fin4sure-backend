@@ -37,12 +37,14 @@ import { startScraperScheduler } from './scrapers/scheduler.js';
 
 const app = express();
 
+const FRONTEND_URL = process.env.FRONTEND_URL || "https://fin4sure.vercel.app";
+
 app.use(
   cors({
     origin: function (origin, callback) {
       const allowed = [
         "http://localhost:5173",
-        "https://fin4sure.vercel.app" // Add explicit vercel domain if known
+        FRONTEND_URL
       ];
       // Allow all vercel.app deployments (production + previews)
       if (!origin || allowed.includes(origin) || /\.vercel\.app$/.test(origin)) {
@@ -59,16 +61,19 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+// Base API Path
+const BASE_PATH = process.env.BASE_PATH || "/api";
+
 // Routes
-app.use("/api/auth", authRouter);
-app.use("/api/admin", adminRouter);
-app.use("/api/broker", brokerRouter);
-app.use("/api/client", clientRouter);
-app.use("/api/lenders", lenderRouter);
-app.use("/api/loan-types", loanTypeRouter);
-app.use("/api/webhooks", webhookRouter);
-app.use("/api/admin/scraper", scraperRouter);
-app.use("/api/location", locationRouter);
+app.use(`${BASE_PATH}/auth`, authRouter);
+app.use(`${BASE_PATH}/admin`, adminRouter);
+app.use(`${BASE_PATH}/broker`, brokerRouter);
+app.use(`${BASE_PATH}/client`, clientRouter);
+app.use(`${BASE_PATH}/lenders`, lenderRouter);
+app.use(`${BASE_PATH}/loan-types`, loanTypeRouter);
+app.use(`${BASE_PATH}/webhooks`, webhookRouter);
+app.use(`${BASE_PATH}/admin/scraper`, scraperRouter);
+app.use(`${BASE_PATH}/location`, locationRouter);
 
 app.get("/", (req, res) => {
   res.send("<h1>Fin4Sure Backend API is running perfectly! 🚀</h1><p>Please visit the Frontend Vercel link to view the actual website.</p>");
