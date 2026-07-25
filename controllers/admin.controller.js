@@ -246,26 +246,67 @@ export const allLeads = async (req, res) => {
   try {
     const { status } = req.query;
 
-    const filter = {};
+    let filter = {};
     if (status && status !== "all_statuses") {
-      const statusObj = await Status.findOne({ where: { name: status } });
-      if (statusObj) filter.status_id = statusObj.id;
+      try {
+        const statusObj = await Status.findOne({ where: { name: status } });
+        if (statusObj) filter.status_id = statusObj.id;
+      } catch (_) {}
     }
 
     const applications = await Loan_Application.findAll({
       where: filter,
-      include: [
-        { model: Borrower, include: [{ model: User, as: 'user', attributes: ['id', 'name', 'email', 'mob_no'] }] },
-        { model: LoanType, as: 'loanType', attributes: ['name', 'short_id'] },
-        { model: Status, attributes: ['name'] }
-      ],
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'DESC']],
+      raw: true
     });
 
     const enrichedLeads = await Promise.all(applications.map(async (app) => {
-      let borrowerObj = null;
+      let clientName = "Unknown Client";
+      let clientEmail = "-";
+      let clientPhone = "-";
+      let clientAddress = "-";
+      let clientState = "-";
+      let clientDistrict = "-";
+      let clientDob = "-";
+
       if (app.borrower_id) {
-        borrowerObj = await Borrower.findOne({ where: { id: app.borrower_id } });
+        try {
+          const borrowerObj = await Borrower.findByPk(app.borrower_id);
+          if (borrowerObj) {
+            clientAddress = borrowerObj.address || "-";
+            clientState = borrowerObj.state || "-";
+            clientDistrict = borrowerObj.district || "-";
+            clientDob = borrowerObj.dob || "-";
+            if (borrowerObj.user_id) {
+              const uObj = await User.findByPk(borrowerObj.user_id);
+              if (uObj) {
+                clientName = uObj.name || clientName;
+                clientEmail = uObj.email || clientEmail;
+                clientPhone = uObj.mob_no || clientPhone;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      let loanTypeName = "Home Loan";
+      if (app.loan_type_id) {
+        try {
+          const ltObj = await LoanType.findByPk(app.loan_type_id);
+          if (ltObj) loanTypeName = ltObj.name;
+        } catch (_) {}
+      }
+
+      let statusName = "in progress";
+      let stageName = "Applied";
+      if (app.status_id) {
+        try {
+          const sObj = await Status.findByPk(app.status_id);
+          if (sObj) {
+            statusName = sObj.name.toLowerCase();
+            stageName = sObj.name;
+          }
+        } catch (_) {}
       }
 
       let lenderName = "SBI";
@@ -279,10 +320,11 @@ export const allLeads = async (req, res) => {
       let partnerName = null;
       if (app.partner_id) {
         try {
-          const pObj = await Partner.findByPk(app.partner_id, {
-            include: [{ model: User, as: 'user', attributes: ['name'] }]
-          });
-          if (pObj && pObj.user) partnerName = pObj.user.name;
+          const pObj = await Partner.findByPk(app.partner_id);
+          if (pObj && pObj.user_id) {
+            const puObj = await User.findByPk(pObj.user_id);
+            if (puObj) partnerName = puObj.name;
+          }
         } catch (_) {}
       }
 
@@ -293,16 +335,16 @@ export const allLeads = async (req, res) => {
       return {
         id: app.id,
         application_no: formattedAppNo,
-        name: app.Borrower?.user ? app.Borrower?.user.name : "Unknown",
-        email: app.Borrower?.user ? app.Borrower?.user.email : "-",
-        number: app.Borrower?.user ? app.Borrower?.user.mob_no : "-",
-        address: borrowerObj ? borrowerObj.address : "-",
-        state: borrowerObj ? borrowerObj.state : "-",
-        district: borrowerObj ? borrowerObj.district : "-",
-        dob: borrowerObj ? borrowerObj.dob : "-",
-        product: app.loanType ? app.loanType.name : "Home Loan",
-        status: app.Status ? app.Status.name.toLowerCase() : "in progress",
-        stage: app.Status ? app.Status.name : "Applied",
+        name: clientName,
+        email: clientEmail,
+        number: clientPhone,
+        address: clientAddress,
+        state: clientState,
+        district: clientDistrict,
+        dob: clientDob,
+        product: loanTypeName,
+        status: statusName,
+        stage: stageName,
         lender: lenderName,
         source: partnerName ? partnerName : "Direct",
         client_preference: app.client_preference,
