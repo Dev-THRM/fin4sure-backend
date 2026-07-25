@@ -70,14 +70,17 @@ const getBrokersList = async () => {
         }
 
         if (!clientName && app.loan_purpose) {
-          const parts = app.loan_purpose.split(/ \u2014 | \u2013 | - /);
-          if (parts[1]) {
-            const subParts = parts[1].split(' (');
-            clientName = subParts[0] ? subParts[0].trim() : null;
-            if (subParts[1]) {
-              clientPhone = subParts[1].replace(')', '').trim();
+          try {
+            const lpStr = String(app.loan_purpose);
+            const parts = lpStr.split(/ \u2014 | \u2013 | - /);
+            if (parts[1]) {
+              const subParts = parts[1].split(' (');
+              clientName = subParts[0] ? subParts[0].trim() : null;
+              if (subParts[1]) {
+                clientPhone = subParts[1].replace(')', '').trim();
+              }
             }
-          }
+          } catch (_) {}
         }
 
         if (!clientName) return null;
@@ -255,14 +258,17 @@ export const allLeads = async (req, res) => {
 
       // 2. Fallback to parsing app.loan_purpose if clientName was missing
       if ((!clientName || clientName === "Unknown Client") && app.loan_purpose) {
-        const parts = app.loan_purpose.split(/ \u2014 | \u2013 | - /);
-        if (parts[1]) {
-          const subParts = parts[1].split(' (');
-          clientName = subParts[0] ? subParts[0].trim() : clientName;
-          if (subParts[1]) {
-            clientPhone = subParts[1].replace(')', '').trim();
+        try {
+          const lpStr = String(app.loan_purpose);
+          const parts = lpStr.split(/ \u2014 | \u2013 | - /);
+          if (parts[1]) {
+            const subParts = parts[1].split(' (');
+            clientName = subParts[0] ? subParts[0].trim() : clientName;
+            if (subParts[1]) {
+              clientPhone = subParts[1].replace(')', '').trim();
+            }
           }
-        }
+        } catch (_) {}
       }
 
       if (!clientName) clientName = `Application #${app.id}`;
