@@ -26,39 +26,49 @@ const getBrokersList = async () => {
 
   return await Promise.all(
     users.map(async (user) => {
-      const partner = await Partner.findOne({
-        where: { user_id: user.id },
-        include: [{ model: City, as: 'city' }]
-      });
-      const cityName = partner && partner.city ? partner.city.name : "";
-      const partnerIdVal = partner ? partner.id : null;
-      console.log(`DEBUG: broker user_id=${user.id}, partnerIdVal=${partnerIdVal}`);
+      let partner = null;
+      let cityName = "";
+      let partnerIdVal = null;
+      try {
+        partner = await Partner.findOne({ where: { user_id: user.id }, raw: true });
+        if (partner) {
+          partnerIdVal = partner.id;
+          if (partner.city_id) {
+            const city = await City.findByPk(partner.city_id, { raw: true });
+            if (city) cityName = city.name;
+          }
+        }
+      } catch (_) {}
 
-      // 1. (Legacy clients table removed)
-
-      // 2. Get referred applications to extract real client details
-      const referredApps = partnerIdVal ? await Loan_Application.findAll({
-        where: { partner_id: partnerIdVal }
-      }) : [];
+      let referredApps = [];
+      if (partnerIdVal) {
+        try {
+          referredApps = await Loan_Application.findAll({
+            where: { partner_id: partnerIdVal },
+            raw: true
+          });
+        } catch (_) {}
+      }
 
       const clientsFromApps = await Promise.all(referredApps.map(async (app) => {
         let clientName = null;
         let clientEmail = null;
         let clientPhone = null;
 
-        // 1. Try fetching real client data from borrower -> user association
         if (app.borrower_id) {
-          const borrowerObj = await Borrower.findByPk(app.borrower_id, {
-            include: [{ model: User, as: 'user' }]
-          });
-          if (borrowerObj && borrowerObj.user) {
-            clientName = borrowerObj.user.name;
-            clientEmail = borrowerObj.user.email;
-            clientPhone = borrowerObj.user.mob_no;
-          }
+          try {
+            const borrowerObj = await Borrower.findByPk(app.borrower_id, { raw: true });
+            if (borrowerObj && borrowerObj.user_id) {
+              const uObj = await User.findByPk(borrowerObj.user_id, { raw: true });
+              if (uObj) {
+                clientName = uObj.name;
+                clientEmail = uObj.email;
+                clientPhone = uObj.mob_no;
+              }
+            }
+          } catch (_) {}
         }
 
-        // 2. Fallback to loan_purpose parsing if borrower lookup failed
         if (!clientName && app.loan_purpose) {
           const parts = app.loan_purpose.split(/ \u2014 | \u2013 | - /);
           if (parts[1]) {
@@ -71,8 +81,6 @@ const getBrokersList = async () => {
         }
 
         if (!clientName) return null;
-
-        // Don't show partner themselves as their own client
         if (clientName === user.name) return null;
 
         return {
@@ -86,7 +94,6 @@ const getBrokersList = async () => {
       }));
 
       const linkedClients = clientsFromApps.filter(Boolean);
-
       const countLeads = partnerIdVal ? await Loan_Application.count({ where: { partner_id: partnerIdVal } }) : 0;
 
       return {
@@ -892,12 +899,12 @@ export const allClients = async (req, res) => {
     
     const enrichedClients = await Promise.all(
       clients.map(async (client) => {
-        const borrower = await Borrower.findOne({ where: { user_id: client.id } });
         let applications = [];
+        const borrower = await Borrower.findOne({ where: { user_id: client.id }, raw: true });
         if (borrower) {
           applications = await Loan_Application.findAll({
             where: { borrower_id: borrower.id },
-            include: [{ model: Status, attributes: ['name'] }]
+            raw: true
           });
         }
         
@@ -905,8 +912,16 @@ export const allClients = async (req, res) => {
         const loanCount = applications.length;
 
         if (loanCount > 0) {
-          const allRejected = applications.every(app => app.Status && app.Status.name.toLowerCase() === 'rejected');
-          const noActive = applications.every(app => app.Status && ['disbursed', 'completed', 'rejected'].includes(app.Status.name.toLowerCase()));
+          const statuses = await Promise.all(applications.map(async (app) => {
+            if (!app.status_id) return '';
+            try {
+              const sObj = await Status.findByPk(app.status_id, { raw: true });
+              return sObj ? sObj.name.toLowerCase() : '';
+            } catch (_) { return ''; }
+          }));
+
+          const allRejected = statuses.length > 0 && statuses.every(st => st === 'rejected');
+          const noActive = statuses.length > 0 && statuses.every(st => ['disbursed', 'completed', 'rejected'].includes(st));
           
           if (allRejected) {
             clientStatus = 'rejected';
@@ -918,14 +933,16 @@ export const allClients = async (req, res) => {
         return {
           ...client,
           loanCount: loanCount,
-          status: clientStatus
+          status: client.status || clientStatus,
+          address: borrower ? borrower.address || "-" : "-",
+          dob: borrower ? borrower.dob || "-" : "-"
         };
       })
     );
     res.json(enrichedClients);
   } catch (err) {
     console.error("All clients error:", err);
-    res.status(500).json({ message: "Failed to fetch borrowers: " + err.message });
+    res.status(500).json({ message: "Failed to fetch borrowers" });
   }
 };
 
@@ -936,30 +953,51 @@ export const timelineActivity = async (req, res) => {
   try {
     const applications = await Loan_Application.findAll({
       limit: 20,
-      include: [
-        {
-          model: Borrower,
-          include: [{ model: User, as: 'user', attributes: ['name'] }]
-        },
-        { model: LoanType, as: 'loanType', attributes: ['name'] },
-        { model: Status, attributes: ['name'] }
-      ],
-      order: [['updatedAt', 'DESC']]
+      order: [['updatedAt', 'DESC']],
+      raw: true
     });
     
-    const timeline = applications.map((app) => {
+    const timeline = await Promise.all(applications.map(async (app) => {
+      let borrowerName = "Unknown";
+      if (app.borrower_id) {
+        try {
+          const borrowerObj = await Borrower.findByPk(app.borrower_id, { raw: true });
+          if (borrowerObj && borrowerObj.user_id) {
+            const uObj = await User.findByPk(borrowerObj.user_id, { raw: true });
+            if (uObj) borrowerName = uObj.name;
+          }
+        } catch (_) {}
+      }
+
+      let productName = "Home Loan";
+      if (app.loan_type_id) {
+        try {
+          const ltObj = await LoanType.findByPk(app.loan_type_id, { raw: true });
+          if (ltObj) productName = ltObj.name;
+        } catch (_) {}
+      }
+
+      let statusName = "pending";
+      if (app.status_id) {
+        try {
+          const sObj = await Status.findByPk(app.status_id, { raw: true });
+          if (sObj) statusName = sObj.name.toLowerCase();
+        } catch (_) {}
+      }
+
       return {
         id: app.id,
-        borrower: app.Borrower?.user ? app.Borrower.user.name : "Unknown",
-        product: app.loanType ? app.loanType.name : "Home Loan",
-        status: app.Status ? app.Status.name.toLowerCase() : "pending",
+        borrower: borrowerName,
+        product: productName,
+        status: statusName,
         date: app.updatedAt
       };
-    });
+    }));
+
     res.json(timeline);
   } catch (err) {
     console.error("Timeline error:", err);
-    res.status(500).json({ message: "Failed to fetch timeline activity: " + err.message });
+    res.status(500).json({ message: "Failed to fetch timeline activity" });
   }
 };
 
