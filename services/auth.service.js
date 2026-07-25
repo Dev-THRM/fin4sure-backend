@@ -90,74 +90,76 @@ export const registerBorrowerService = async (data) => {
 
   const normalizedEmail = email.toLowerCase().trim();
 
-  const existingUser = await User.findOne({
+  let existingUser = await User.findOne({
     where: {
       [Op.or]: [{ mob_no: number }, { email: normalizedEmail }]
     }
   });
 
-  if (existingUser) {
-    throw new Error("User already exists");
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 10);
-
   const transaction = await sequelize.transaction();
 
   try {
-    console.log('[STEP 1] Creating user...');
-    const newUser = await User.create({
-      name,
-      email: normalizedEmail,
-      mob_no: number,
-      password_hash: hashedPassword,
-      role_id: 1, // Borrower role
-      status: 'active'
-    }, { transaction });
-
-    let pincodeRecord = await Pincode.findOne({ where: { code: pincode }, transaction });
-    if (!pincodeRecord) {
-      const stateName = (state || "Unknown State").trim();
-      const districtName = (district || "Unknown District").trim();
-      const cityName = (data.city || "Unknown City").trim();
-      
-      const [stateObj] = await State.findOrCreate({
-        where: { name: stateName },
-        defaults: { country: "India" },
-        transaction
-      });
-      
-      const [districtObj] = await District.findOrCreate({
-        where: { name: districtName },
-        defaults: { state_id: stateObj.id },
-        transaction
-      });
-      
-      const [cityObj] = await City.findOrCreate({
-        where: { name: cityName },
-        defaults: { district_id: districtObj.id },
-        transaction
-      });
-
-      pincodeRecord = await Pincode.create({
-        code: pincode,
-        city_id: cityObj.id
+    let targetUser = existingUser;
+    if (!targetUser) {
+      const hashedPassword = await bcrypt.hash(password || "Pass@1234", 10);
+      targetUser = await User.create({
+        name,
+        email: normalizedEmail,
+        mob_no: number,
+        password_hash: hashedPassword,
+        role_id: 1, // Borrower role
+        status: 'active'
       }, { transaction });
     }
 
-    console.log('[STEP 3] Creating borrower...');
-    const newBorrower = await Borrower.create({
-      user_id: newUser.id,
-      dob: new Date(dob),
-      gender,
-      address,
-      pincode_id: pincodeRecord.id,
-      profile_status: 'Active'
-    }, { transaction });
+    let pincodeRecord = null;
+    if (pincode) {
+      pincodeRecord = await Pincode.findOne({ where: { code: pincode }, transaction });
+      if (!pincodeRecord) {
+        const stateName = (state || "Unknown State").trim();
+        const districtName = (district || "Unknown District").trim();
+        const cityName = (data.city || "Unknown City").trim();
+        
+        const [stateObj] = await State.findOrCreate({
+          where: { name: stateName },
+          defaults: { country: "India" },
+          transaction
+        });
+        
+        const [districtObj] = await District.findOrCreate({
+          where: { name: districtName },
+          defaults: { state_id: stateObj.id },
+          transaction
+        });
+        
+        const [cityObj] = await City.findOrCreate({
+          where: { name: cityName },
+          defaults: { district_id: districtObj.id },
+          transaction
+        });
 
+        pincodeRecord = await Pincode.create({
+          code: pincode,
+          city_id: cityObj.id
+        }, { transaction });
+      }
+    }
 
+    let targetBorrower = await Borrower.findOne({ where: { user_id: targetUser.id }, transaction });
+    if (!targetBorrower) {
+      targetBorrower = await Borrower.create({
+        user_id: targetUser.id,
+        phone_number: number || targetUser.mob_no,
+        borrower_id: `BRW-${Date.now().toString().slice(-6)}`,
+        dob: dob ? new Date(dob) : new Date("1995-01-01"),
+        gender: gender || "male",
+        address: address || "Main Street",
+        pincode_id: pincodeRecord ? pincodeRecord.id : null,
+        profile_status: 'Active'
+      }, { transaction });
+    }
 
-    let loanTypeId = null;
+    let loanTypeId = 1;
     if (loanType) {
       const typeRecord = await Loan_type.findOne({ where: { short_id: loanType }, transaction });
       if (typeRecord) {
@@ -174,7 +176,6 @@ export const registerBorrowerService = async (data) => {
       }
     }
 
-    console.log('[STEP 4] Creating loan application...');
     let applicationNo = 10000;
     const maxAppNo = await Loan_Application.max('application_no', { transaction });
     if (maxAppNo && maxAppNo >= 10000) {
@@ -183,18 +184,18 @@ export const registerBorrowerService = async (data) => {
 
     const newLoanApp = await Loan_Application.create({
       application_no: applicationNo,
-      borrower_id: newBorrower.id,
+      borrower_id: targetBorrower.id,
       loan_type_id: loanTypeId,
-      loan_amount: loanAmount,
-      loan_purpose: loanPurpose,
-      tenure: tenure,
+      loan_amount: loanAmount || 0,
+      loan_purpose: loanPurpose || "Loan Application",
+      tenure: tenure || 12,
       status_id: 1, // Default status e.g., 'Under Review'
       partner_id: partnerIdVal,
       client_preference: partnerIdVal ? 'partner_routing' : null
     }, { transaction });
 
     // Handle Lender Applications for multiple selected lenders
-    if (selectedLenders && selectedLenders.length > 0 && loanTypeId) {
+    if (selectedLenders && Array.isArray(selectedLenders) && selectedLenders.length > 0 && loanTypeId) {
       for (const lender of selectedLenders) {
         const rateObj = await Lender_Loan_Rates.findOne({
           where: { lender_id: lender, loan_type_id: loanTypeId },
@@ -214,13 +215,20 @@ export const registerBorrowerService = async (data) => {
     await transaction.commit();
 
     const accessToken = signAccessToken({
-      _id: newUser.id,
-      role: newUser.role_id,
+      _id: targetUser.id,
+      role: targetUser.role_id,
     });
 
-    return { user: newUser, borrower: newBorrower, accessToken };
+    return {
+      user: targetUser,
+      borrower: targetBorrower,
+      loanApplication: newLoanApp,
+      accessToken,
+      applicationId: newLoanApp.id
+    };
   } catch (error) {
     await transaction.rollback();
+    console.error("registerBorrower error:", error);
     throw error;
   }
 };
