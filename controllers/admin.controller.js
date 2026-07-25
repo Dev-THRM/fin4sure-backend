@@ -257,7 +257,9 @@ export const allLeads = async (req, res) => {
       include: [
         { model: Borrower, include: [{ model: User, as: 'user', attributes: ['id', 'name', 'email', 'mob_no'] }] },
         { model: LoanType, as: 'loanType', attributes: ['name', 'short_id'] },
-        { model: Status, attributes: ['name'] }
+        { model: Status, attributes: ['name'] },
+        { model: Lender, as: 'lender', attributes: ['name', 'short_name'] },
+        { model: Partner, include: [{ model: User, as: 'user', attributes: ['name'] }] }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -267,9 +269,14 @@ export const allLeads = async (req, res) => {
       if (app.borrower_id) {
         borrowerObj = await Borrower.findOne({ where: { id: app.borrower_id } });
       }
+      const partnerName = app.Partner?.user?.name || null;
+      const formattedAppNo = app.application_no 
+        ? (String(app.application_no).startsWith('F4S') ? app.application_no : `F4S-${app.application_no}`) 
+        : `F4S-${2000 + app.id}`;
+
       return {
         id: app.id,
-        application_no: app.application_no,
+        application_no: formattedAppNo,
         name: app.Borrower?.user ? app.Borrower?.user.name : "Unknown",
         email: app.Borrower?.user ? app.Borrower?.user.email : "-",
         number: app.Borrower?.user ? app.Borrower?.user.mob_no : "-",
@@ -278,10 +285,13 @@ export const allLeads = async (req, res) => {
         district: borrowerObj ? borrowerObj.district : "-",
         dob: borrowerObj ? borrowerObj.dob : "-",
         product: app.loanType ? app.loanType.name : "Home Loan",
-        status: app.Status ? app.Status.name.toLowerCase() : "pending",
-        source: app.client_preference === 'partner_routing' ? "Partner" : "Direct",
+        status: app.Status ? app.Status.name.toLowerCase() : "in progress",
+        stage: app.Status ? app.Status.name : "Applied",
+        lender: app.lender ? (app.lender.short_name || app.lender.name) : "SBI",
+        source: partnerName ? partnerName : "Direct",
         client_preference: app.client_preference,
         partner_id: app.partner_id,
+        partner_name: partnerName,
         loan_amount: app.loan_amount,
         tenure: app.tenure,
         loan_purpose: app.loan_purpose,
@@ -292,6 +302,7 @@ export const allLeads = async (req, res) => {
 
     res.json(enrichedLeads);
   } catch (e) {
+    console.error("allLeads error:", e);
     res.status(500).json({ message: "Failed to fetch leads" });
   }
 };
