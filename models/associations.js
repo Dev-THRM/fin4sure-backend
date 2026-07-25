@@ -45,9 +45,9 @@ export const setupAssociations = () => {
   Borrower.hasMany(Loan_Application, { foreignKey: 'borrower_id' });
   Loan_Application.belongsTo(Borrower, { foreignKey: 'borrower_id' });
 
-  // Lender <-> Loan_Application direct association
-  Lender.hasMany(Loan_Application, { foreignKey: 'lender_id', as: 'lender' });
-  Loan_Application.belongsTo(Lender, { foreignKey: 'lender_id', as: 'lender' });
+  // Lender <-> Loan_Application direct association removed (applications use Lender_Application junction table)
+  // Lender.hasMany(Loan_Application, { foreignKey: 'lender_id', as: 'lender' });
+  // Loan_Application.belongsTo(Lender, { foreignKey: 'lender_id', as: 'lender' });
 
   Loan_Application.hasMany(Lender_Application, { foreignKey: 'loan_application_id' });
   Lender_Application.belongsTo(Loan_Application, { foreignKey: 'loan_application_id' });

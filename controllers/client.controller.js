@@ -75,10 +75,13 @@ export const getMyApplications = async (req, res) => {
       }
     }
 
+    const validAttributes = ['id', 'application_no', 'borrower_id', 'loan_type_id', 'loan_amount', 'loan_purpose', 'tenure', 'status_id', 'createdAt', 'updatedAt'];
+
     // 3. Find applications by borrower_id
     let applications = [];
     if (borrowerIds.length > 0) {
       applications = await Loan_Application.findAll({
+        attributes: validAttributes,
         where: { borrower_id: borrowerIds },
         order: [['createdAt', 'DESC']],
         raw: true
@@ -88,6 +91,7 @@ export const getMyApplications = async (req, res) => {
     // 4. Fallback: If no applications found for this specific borrower, retrieve recent active applications
     if (applications.length === 0) {
       applications = await Loan_Application.findAll({
+        attributes: validAttributes,
         order: [['createdAt', 'DESC']],
         limit: 10,
         raw: true
