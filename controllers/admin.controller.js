@@ -1250,12 +1250,21 @@ export const updatePlatformSettings = async (req, res) => {
 ----------------------------------------------------- */
 export const getDashboardBundle = async (req, res) => {
   try {
-    const statsData = await new Promise((resolve) => {
-      userCount(req, {
-        json: resolve,
-        status: () => ({ json: () => resolve({}) })
-      });
-    });
+    let statsData = {};
+    try {
+      const totalClients = await User.count({ where: { role_id: 1 } });
+      const totalBrokers = await User.count({ where: { role_id: 2 } });
+      const totalApplications = await Loan_Application.count();
+      statsData = {
+        totalClients,
+        totalBrokers,
+        totalApplications,
+        borrowers: totalClients,
+        leads: totalApplications,
+        brokers: totalBrokers,
+        rating: "5.0"
+      };
+    } catch (_) {}
 
     let leadsData = [];
     try {
