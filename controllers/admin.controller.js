@@ -1244,3 +1244,260 @@ export const updatePlatformSettings = async (req, res) => {
     res.status(500).json({ message: "Failed to update platform settings" });
   }
 };
+
+/* -----------------------------------------------------
+   ADMIN – SINGLE BATCH DASHBOARD BUNDLE
+----------------------------------------------------- */
+export const getDashboardBundle = async (req, res) => {
+  try {
+    const statsData = await new Promise((resolve) => {
+      userCount(req, {
+        json: resolve,
+        status: () => ({ json: () => resolve({}) })
+      });
+    });
+
+    let leadsData = [];
+    try {
+      const applications = await Loan_Application.findAll({
+        order: [['createdAt', 'DESC']],
+        raw: true
+      });
+      leadsData = await Promise.all(applications.map(async (app) => {
+        let clientName = null;
+        let clientEmail = "-";
+        let clientPhone = "-";
+        let clientAddress = "-";
+        let clientState = "-";
+        let clientDistrict = "-";
+        let clientDob = "-";
+
+        if (app.borrower_id) {
+          try {
+            const borrowerObj = await Borrower.findByPk(app.borrower_id, { raw: true });
+            if (borrowerObj) {
+              clientAddress = borrowerObj.address || "-";
+              clientState = borrowerObj.state || "-";
+              clientDistrict = borrowerObj.district || "-";
+              clientDob = borrowerObj.dob || "-";
+              if (borrowerObj.user_id) {
+                const uObj = await User.findByPk(borrowerObj.user_id, { raw: true });
+                if (uObj) {
+                  clientName = uObj.name;
+                  clientEmail = uObj.email || "-";
+                  clientPhone = uObj.mob_no || "-";
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
+        if (!clientName && app.loan_purpose) {
+          const parts = app.loan_purpose.split(/ \u2014 | \u2013 | - /);
+          if (parts[1]) {
+            const subParts = parts[1].split(' (');
+            clientName = subParts[0] ? subParts[0].trim() : null;
+            if (subParts[1]) {
+              clientPhone = subParts[1].replace(')', '').trim();
+            }
+          }
+        }
+
+        if (!clientName) clientName = `Application #${app.id}`;
+
+        let loanTypeName = "Home Loan";
+        if (app.loan_type_id) {
+          try {
+            const ltObj = await LoanType.findByPk(app.loan_type_id, { raw: true });
+            if (ltObj) loanTypeName = ltObj.name;
+          } catch (_) {}
+        }
+
+        let statusName = "in progress";
+        let stageName = "Applied";
+        if (app.status_id) {
+          try {
+            const sObj = await Status.findByPk(app.status_id, { raw: true });
+            if (sObj) {
+              statusName = sObj.name.toLowerCase();
+              stageName = sObj.name;
+            }
+          } catch (_) {}
+        }
+
+        let lenderName = "SBI";
+        if (app.lender_id) {
+          try {
+            const lObj = await Lender.findByPk(app.lender_id, { raw: true });
+            if (lObj) lenderName = lObj.short_name || lObj.name;
+          } catch (_) {}
+        }
+
+        let partnerName = null;
+        if (app.partner_id) {
+          try {
+            const pObj = await Partner.findByPk(app.partner_id, { raw: true });
+            if (pObj && pObj.user_id) {
+              const puObj = await User.findByPk(pObj.user_id, { raw: true });
+              if (puObj) partnerName = puObj.name;
+            }
+          } catch (_) {}
+        }
+
+        const formattedAppNo = app.application_no 
+          ? (String(app.application_no).startsWith('F4S') ? app.application_no : `F4S-${app.application_no}`) 
+          : `F4S-${2000 + app.id}`;
+
+        return {
+          id: app.id,
+          application_no: formattedAppNo,
+          name: clientName,
+          email: clientEmail,
+          number: clientPhone,
+          address: clientAddress,
+          state: clientState,
+          district: clientDistrict,
+          dob: clientDob,
+          product: loanTypeName,
+          status: statusName,
+          stage: stageName,
+          lender: lenderName,
+          source: partnerName ? partnerName : "Direct",
+          client_preference: app.client_preference,
+          partner_id: app.partner_id,
+          partner_name: partnerName,
+          loan_amount: app.loan_amount,
+          tenure: app.tenure,
+          loan_purpose: app.loan_purpose,
+          createdAt: app.createdAt,
+          updatedAt: app.updatedAt
+        };
+      }));
+    } catch (_) {}
+
+    let brokersData = [];
+    try {
+      brokersData = await getBrokersList();
+    } catch (_) {}
+
+    let clientsData = [];
+    try {
+      const clients = await User.findAll({
+        where: { role_id: 1 },
+        order: [['createdAt', 'DESC']],
+        raw: true
+      });
+      clientsData = await Promise.all(
+        clients.map(async (client) => {
+          let applications = [];
+          let borrower = null;
+          try {
+            borrower = await Borrower.findOne({ where: { user_id: client.id }, raw: true });
+            if (borrower) {
+              applications = await Loan_Application.findAll({
+                where: { borrower_id: borrower.id },
+                raw: true
+              });
+            }
+          } catch (_) {}
+          
+          let clientStatus = 'active';
+          const loanCount = applications.length;
+
+          if (loanCount > 0) {
+            const statuses = await Promise.all(applications.map(async (app) => {
+              if (!app.status_id) return '';
+              try {
+                const sObj = await Status.findByPk(app.status_id, { raw: true });
+                return sObj ? sObj.name.toLowerCase() : '';
+              } catch (_) { return ''; }
+            }));
+
+            const allRejected = statuses.length > 0 && statuses.every(st => st === 'rejected');
+            const noActive = statuses.length > 0 && statuses.every(st => ['disbursed', 'completed', 'rejected'].includes(st));
+            
+            if (allRejected) {
+              clientStatus = 'rejected';
+            } else if (noActive) {
+              clientStatus = 'inactive';
+            }
+          }
+
+          return {
+            ...client,
+            loanCount: loanCount,
+            status: client.status || clientStatus,
+            address: borrower ? borrower.address || "-" : "-",
+            dob: borrower ? borrower.dob || "-" : "-"
+          };
+        })
+      );
+    } catch (_) {}
+
+    let timelineData = [];
+    try {
+      const timelineApps = await Loan_Application.findAll({
+        limit: 20,
+        order: [['updatedAt', 'DESC']],
+        raw: true
+      });
+      timelineData = await Promise.all(timelineApps.map(async (app) => {
+        let borrowerName = "Unknown";
+        if (app.borrower_id) {
+          try {
+            const borrowerObj = await Borrower.findByPk(app.borrower_id, { raw: true });
+            if (borrowerObj && borrowerObj.user_id) {
+              const uObj = await User.findByPk(borrowerObj.user_id, { raw: true });
+              if (uObj) borrowerName = uObj.name;
+            }
+          } catch (_) {}
+        }
+        if (borrowerName === "Unknown" && app.loan_purpose) {
+          const parts = app.loan_purpose.split(/ \u2014 | \u2013 | - /);
+          if (parts[1]) {
+            const subParts = parts[1].split(' (');
+            if (subParts[0]) borrowerName = subParts[0].trim();
+          }
+        }
+        let productName = "Home Loan";
+        if (app.loan_type_id) {
+          try {
+            const ltObj = await LoanType.findByPk(app.loan_type_id, { raw: true });
+            if (ltObj) productName = ltObj.name;
+          } catch (_) {}
+        }
+        let statusName = "pending";
+        if (app.status_id) {
+          try {
+            const sObj = await Status.findByPk(app.status_id, { raw: true });
+            if (sObj) statusName = sObj.name.toLowerCase();
+          } catch (_) {}
+        }
+        return {
+          id: app.id,
+          borrower: borrowerName,
+          product: productName,
+          status: statusName,
+          date: app.updatedAt
+        };
+      }));
+    } catch (_) {}
+
+    res.json({
+      stats: statsData,
+      leads: leadsData,
+      brokers: brokersData,
+      clients: clientsData,
+      timeline: timelineData
+    });
+  } catch (err) {
+    console.error("getDashboardBundle error:", err);
+    res.json({
+      stats: {},
+      leads: [],
+      brokers: [],
+      clients: [],
+      timeline: []
+    });
+  }
+};

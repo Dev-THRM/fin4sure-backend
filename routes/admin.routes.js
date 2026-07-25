@@ -16,12 +16,16 @@ import {
   getLenderRates,
   updateLenderRates,
   getPlatformSettings,
-  updatePlatformSettings
+  updatePlatformSettings,
+  getDashboardBundle
 } from "../controllers/admin.controller.js";
 
 import { verifyUser, isAdmin } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
+
+/* ---------- DASHBOARD SINGLE BATCH BUNDLE ---------- */
+router.get("/dashboard-bundle", verifyUser, isAdmin, getDashboardBundle);
 
 /* ---------- DASHBOARD STATS ---------- */
 router.get("/stats", verifyUser, isAdmin, userCount);
