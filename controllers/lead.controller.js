@@ -58,9 +58,18 @@ export const applyLoan = async (req, res) => {
           applicationNo = maxAppNo + 1;
         }
         
-        const borrower = await Borrower.findOne({ where: { user_id: userId } });
+        let borrower = await Borrower.findOne({ where: { user_id: userId } });
         if (!borrower) {
-          return res.status(404).json({ message: "Borrower profile not found" });
+          borrower = await Borrower.create({
+            user_id: userId,
+            phone_number: client.number || "9876543210",
+            borrower_id: `BRW-${Date.now().toString().slice(-6)}`,
+            dob: dob || client.dob || "1995-01-01",
+            gender: "male",
+            address: address || client.address || "Main Address",
+            pincode: pincode || client.pincode || "110001",
+            profile_status: "Active"
+          });
         }
 
         const newLoanApp = await Loan_Application.create({
