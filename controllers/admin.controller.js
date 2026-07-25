@@ -213,53 +213,67 @@ export const allLeads = async (req, res) => {
   try {
     const { status } = req.query;
 
-    let filter = {};
+    let statusFilter = "";
     if (status && status !== "all_statuses") {
       try {
-        const statusObj = await Status.findOne({ where: { name: status } });
-        if (statusObj) filter.status_id = statusObj.id;
+        const statusObj = await Status.findOne({ where: { name: status }, raw: true });
+        if (statusObj) {
+          statusFilter = `AND la.status_id = ${sequelize.escape(statusObj.id)}`;
+        }
       } catch (_) {}
     }
 
-    const applications = await Loan_Application.findAll({
-      where: filter,
-      order: [['createdAt', 'DESC']],
-      include: [
-        { model: Borrower, include: [{ model: User, as: 'user' }] },
-        { model: Status },
-        { model: LoanType, as: 'loanType' }
-      ]
-    });
+    const [rows] = await sequelize.query(`
+      SELECT
+        la.id,
+        la.application_no,
+        la.loan_amount,
+        la.tenure,
+        la.loan_purpose,
+        la.borrower_id,
+        la.lender_id,
+        la.partner_id,
+        la.loan_type_id,
+        la.status_id,
+        la.client_preference,
+        la.createdAt,
+        la.updatedAt,
+        u.name       AS client_name,
+        u.email      AS client_email,
+        u.mob_no     AS client_phone,
+        b.address    AS client_address,
+        b.state      AS client_state,
+        b.district   AS client_district,
+        b.dob        AS client_dob,
+        lt.name      AS loan_type_name,
+        s.name       AS status_name,
+        l.short_name AS lender_short,
+        l.name       AS lender_name,
+        pu.name      AS partner_name
+      FROM loan_applications la
+      LEFT JOIN borrowers b ON b.id = la.borrower_id
+      LEFT JOIN users u ON u.id = b.user_id
+      LEFT JOIN loan_types lt ON lt.id = la.loan_type_id
+      LEFT JOIN statuses s ON s.id = la.status_id
+      LEFT JOIN lenders l ON l.id = la.lender_id
+      LEFT JOIN partners p ON p.id = la.partner_id
+      LEFT JOIN users pu ON pu.id = p.user_id
+      WHERE 1=1 ${statusFilter}
+      ORDER BY la.createdAt DESC
+    `);
 
-    const enrichedLeads = await Promise.all(applications.map(async (instance) => {
-      const app = instance.get({ plain: true });
-      let clientName = "Unknown Client";
-      let clientEmail = "-";
-      let clientPhone = "-";
-      let clientAddress = "-";
-      let clientState = "-";
-      let clientDistrict = "-";
-      let clientDob = "-";
+    const enrichedLeads = rows.map((app) => {
+      let clientName = app.client_name || null;
+      let clientPhone = app.client_phone || "-";
 
-      if (app.Borrower) {
-        clientAddress = app.Borrower.address || "-";
-        clientState = app.Borrower.state || "-";
-        clientDistrict = app.Borrower.district || "-";
-        clientDob = app.Borrower.dob || "-";
-        if (app.Borrower.user) {
-          clientName = app.Borrower.user.name || clientName;
-          clientEmail = app.Borrower.user.email || clientEmail;
-          clientPhone = app.Borrower.user.mob_no || clientPhone;
-        }
-      }
-
-      if ((!clientName || clientName === "Unknown Client") && app.loan_purpose) {
+      // Fallback: parse from loan_purpose if no borrower linked
+      if (!clientName && app.loan_purpose) {
         try {
           const lpStr = String(app.loan_purpose);
-          const parts = lpStr.split(/ \u2014 | \u2013 | - /);
+          const parts = lpStr.split(/ — | – | - /);
           if (parts[1]) {
             const subParts = parts[1].split(' (');
-            clientName = subParts[0] ? subParts[0].trim() : clientName;
+            clientName = subParts[0] ? subParts[0].trim() : null;
             if (subParts[1]) {
               clientPhone = subParts[1].replace(')', '').trim();
             }
@@ -269,71 +283,44 @@ export const allLeads = async (req, res) => {
 
       if (!clientName) clientName = `Application #${app.id}`;
 
-      let loanTypeName = "Home Loan";
-      if (app.loanType) loanTypeName = app.loanType.name;
-
-      let statusName = "in progress";
-      let stageName = "Applied";
-      if (app.Status) {
-        statusName = app.Status.name.toLowerCase();
-        stageName = app.Status.name;
-      }
-
-      let lenderName = "SBI";
-      if (app.lender_id) {
-        try {
-          const lObj = await Lender.findByPk(app.lender_id, { raw: true });
-          if (lObj) lenderName = lObj.short_name || lObj.name;
-        } catch (_) {}
-      }
-
-      let partnerName = null;
-      if (app.partner_id) {
-        try {
-          const pObj = await Partner.findByPk(app.partner_id, { raw: true });
-          if (pObj && pObj.user_id) {
-            const puObj = await User.findByPk(pObj.user_id, { raw: true });
-            if (puObj) partnerName = puObj.name;
-          }
-        } catch (_) {}
-      }
-
-      const formattedAppNo = app.application_no 
-        ? (String(app.application_no).startsWith('F4S') ? app.application_no : `F4S-${app.application_no}`) 
+      const rawStatus = app.status_name || "in progress";
+      const formattedAppNo = app.application_no
+        ? (String(app.application_no).startsWith('F4S') ? app.application_no : `F4S-${app.application_no}`)
         : `F4S-${2000 + app.id}`;
 
       return {
         id: app.id,
         application_no: formattedAppNo,
         name: clientName,
-        email: clientEmail,
+        email: app.client_email || "-",
         number: clientPhone,
-        address: clientAddress,
-        state: clientState,
-        district: clientDistrict,
-        dob: clientDob,
-        product: loanTypeName,
-        status: statusName,
-        stage: stageName,
-        lender: lenderName,
-        source: partnerName ? partnerName : "Direct",
+        address: app.client_address || "-",
+        state: app.client_state || "-",
+        district: app.client_district || "-",
+        dob: app.client_dob || "-",
+        product: app.loan_type_name || "Home Loan",
+        status: rawStatus.toLowerCase(),
+        stage: rawStatus,
+        lender: app.lender_short || app.lender_name || "SBI",
+        source: app.partner_name || "Direct",
         client_preference: app.client_preference,
         partner_id: app.partner_id,
-        partner_name: partnerName,
+        partner_name: app.partner_name || null,
         loan_amount: app.loan_amount,
         tenure: app.tenure,
         loan_purpose: app.loan_purpose,
         createdAt: app.createdAt,
         updatedAt: app.updatedAt
       };
-    }));
+    });
 
     res.json(enrichedLeads);
   } catch (e) {
     console.error("allLeads error:", e);
-    res.status(500).json({ message: "Failed to fetch leads" });
+    res.status(500).json({ message: "Failed to fetch leads", error: e.message });
   }
 };
+
 
 /* -----------------------------------------------------
    ADMIN – UPDATE BROKER STATUS
