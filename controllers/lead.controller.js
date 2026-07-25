@@ -47,9 +47,18 @@ export const applyLoan = async (req, res) => {
         /* Update Borrower address details if needed, for now skip since we need Borrower record */
 
         let loanTypeId = 1; // Default fallback
-        const typeRecord = await Loan_type.findOne({ where: { short_id: product } });
-        if (typeRecord) {
+        if (product) {
+          const typeRecord = await Loan_type.findOne({
+            where: {
+              [Op.or]: [
+                { short_id: product },
+                { name: product }
+              ]
+            }
+          });
+          if (typeRecord) {
             loanTypeId = typeRecord.id;
+          }
         }
 
         let applicationNo = 10000;
@@ -61,7 +70,10 @@ export const applyLoan = async (req, res) => {
         let borrower = await Borrower.findOne({ where: { user_id: userId } });
         if (!borrower) {
           let pincodeRec = await Pincode.findOne({ where: { code: pincode || "110001" } });
-          let pincodeId = pincodeRec ? pincodeRec.id : 1;
+          if (!pincodeRec) {
+            pincodeRec = await Pincode.findOne();
+          }
+          const pincodeId = pincodeRec ? pincodeRec.id : 1;
 
           borrower = await Borrower.create({
             user_id: userId,
@@ -78,8 +90,8 @@ export const applyLoan = async (req, res) => {
           borrower_id: borrower.id,
           loan_type_id: loanTypeId,
           loan_amount: loanAmount || 0,
-          loan_purpose: loan_purpose || (typeRecord ? typeRecord.name : product),
-          tenure: tenure || 0,
+          loan_purpose: loan_purpose || product,
+          tenure: tenure || 12,
           status_id: 1, // applied
           partner_id: null,
           lender_id: null,
@@ -88,9 +100,14 @@ export const applyLoan = async (req, res) => {
 
         if (selectedLenders && Array.isArray(selectedLenders) && selectedLenders.length > 0) {
           for (const lenderId of selectedLenders) {
-            const rateObj = await Lender_Loan_Rates.findOne({
+            let rateObj = await Lender_Loan_Rates.findOne({
               where: { lender_id: lenderId, loan_type_id: loanTypeId }
             });
+            if (!rateObj) {
+              rateObj = await Lender_Loan_Rates.findOne({
+                where: { lender_id: lenderId }
+              });
+            }
             if (rateObj) {
               await Lender_Application.create({
                 loan_application_id: newLoanApp.id,
