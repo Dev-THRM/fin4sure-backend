@@ -34,7 +34,7 @@ router.get("/stats", verifyUser, isAdmin, userCount);
 router.get("/brokers", verifyUser, isAdmin, brokersWithFullData);
 
 /* ---------- LEADS (FULL DATA) ---------- */
-router.get("/leads", verifyUser, isAdmin, allLeads);
+// router.get("/leads", verifyUser, isAdmin, allLeads);
 
 /* ---------- ACTIONS ---------- */
 router.post("/broker-status", verifyUser, isAdmin, updateBrokerStatus);
