@@ -1,6 +1,8 @@
+import { Op } from "sequelize";
 import Lead from "../models/lead.model.js";
 import User from "../models/user.js";
 import Borrower from "../models/borrower.js";
+import Pincode from "../models/pincode.js";
 import { encryptPAN, hashPAN } from "../utils/pan.crypto.js";
 import { LOAN_PRODUCT_IDS } from "../utils/constants.js";
 
