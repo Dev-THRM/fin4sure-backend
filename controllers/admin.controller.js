@@ -491,27 +491,27 @@ export const updateApplication = async (req, res) => {
     let status_id = app.status_id;
     if (targetStatusName) {
       try {
-        const sObj = await Status.findOne({
-          where: sequelize.where(
-            sequelize.fn('LOWER', sequelize.col('name')),
-            targetStatusName.toLowerCase().trim()
-          )
-        });
-        if (sObj) status_id = sObj.id;
-      } catch (_) {}
+        const allStatuses = await Status.findAll({ raw: true });
+        const matched = allStatuses.find(s => s.name && s.name.toLowerCase().trim() === targetStatusName.toLowerCase().trim());
+        if (matched) status_id = matched.id;
+      } catch (err) {
+        console.error("Status lookup error:", err);
+      }
     }
 
     // 2. Resolve lender_id from lender name if provided
     let lender_id = app.lender_id;
     if (lender) {
       try {
-        const lObj = await Lender.findOne({
-          where: {
-            name: lender
-          }
-        });
-        if (lObj) lender_id = lObj.id;
-      } catch (_) {}
+        const allLenders = await Lender.findAll({ raw: true });
+        const matchedLender = allLenders.find(l => 
+          (l.name && l.name.toLowerCase().includes(lender.toLowerCase())) ||
+          (l.short_name && l.short_name.toLowerCase().includes(lender.toLowerCase()))
+        );
+        if (matchedLender) lender_id = matchedLender.id;
+      } catch (err) {
+        console.error("Lender lookup error:", err);
+      }
     }
 
     // 3. Update borrower/user name if provided
