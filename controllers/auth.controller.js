@@ -163,6 +163,7 @@ export const loginHandler = async (req, res) => {
         name: user.name,
         email: user.email,
         role,
+        accessToken,
       });
   } catch (err) {
     console.error("Login error:", err);
@@ -460,6 +461,7 @@ export const adminLoginHandler = async (req, res) => {
       })
       .json({
         success: true,
+        accessToken,
         user: {
           _id: admin.id,
           name: admin.name,
