@@ -1298,91 +1298,97 @@ export const timelineActivity = async (req, res) => {
 };
 
 /* -----------------------------------------------------
-   ADMIN – LENDER INTEREST RATES
+   ADMIN – LENDER INTEREST RATES HELPER
 ----------------------------------------------------- */
+export const getLenderRatesHelper = async (loanTypeShortId = 'HL') => {
+  let loanTypeId = 1;
+  if (loanTypeShortId) {
+    try {
+      const lt = await LoanType.findOne({ 
+        where: { short_id: loanTypeShortId } 
+      });
+      if (lt) loanTypeId = lt.id;
+    } catch (_) {}
+  }
+
+  let lenders = [];
+  try {
+    lenders = await Lender.findAll({
+      order: [['name', 'ASC']],
+      raw: true
+    });
+  } catch (_) {}
+
+  if (!lenders || lenders.length === 0) {
+    try {
+      lenders = await Bank.findAll({ raw: true });
+    } catch (_) {}
+  }
+
+  if (!lenders || lenders.length === 0) {
+    lenders = [
+      { id: 1, name: 'SBI', type: 'PSU', offer: 'Zero PF on home' },
+      { id: 2, name: 'HDFC Bank', type: 'Private', offer: 'Pre-approved off' },
+      { id: 3, name: 'ICICI Bank', type: 'Private', offer: 'Instant in-princip' },
+      { id: 4, name: 'Axis Bank', type: 'Private', offer: 'Offer text' },
+      { id: 5, name: 'Kotak Mahindra', type: 'Private', offer: 'Offer text' },
+      { id: 6, name: 'Bajaj Finserv', type: 'NBFC/HFC', offer: 'Pre-approved pei' },
+      { id: 7, name: 'PNB Housing', type: 'NBFC/HFC', offer: 'Offer text' },
+      { id: 8, name: 'LIC Housing', type: 'NBFC/HFC', offer: 'Griha Lakshmi Sp' },
+      { id: 9, name: 'Tata Capital', type: 'NBFC/HFC', offer: 'Digital home loan' },
+      { id: 10, name: 'Bank of Baroda', type: 'PSU', offer: 'Offer text' }
+    ];
+  }
+
+  const defaultRatePresets = {
+    1: { flowLow: "7.1", flowHigh: "9.65", fixLow: "8.7", fixHigh: "11.2" },
+    2: { flowLow: "7.2", flowHigh: "9.8", fixLow: "8.8", fixHigh: "11.5" },
+    3: { flowLow: "7.25", flowHigh: "9.9", fixLow: "8.9", fixHigh: "11.6" },
+    4: { flowLow: "7.3", flowHigh: "10.0", fixLow: "9.0", fixHigh: "11.7" },
+    5: { flowLow: "7.4", flowHigh: "9.75", fixLow: "9.0", fixHigh: "11.5" },
+    6: { flowLow: "7.25", flowHigh: "10.5", fixLow: "9.0", fixHigh: "12.0" },
+    7: { flowLow: "7.5", flowHigh: "13.45", fixLow: "9.0", fixHigh: "14.0" },
+    8: { flowLow: "7.5", flowHigh: "10.35", fixLow: "9.5", fixHigh: "12.0" },
+    9: { flowLow: "8.5", flowHigh: "11.0", fixLow: "9.5", fixHigh: "12.0" },
+    10: { flowLow: "7.1", flowHigh: "9.6", fixLow: "8.6", fixHigh: "11.1" }
+  };
+
+  return await Promise.all(
+    lenders.map(async (lender, idx) => {
+      let floatRate = null;
+      let fixedRate = null;
+      try {
+        floatRate = await LenderLoanRates.findOne({
+          where: { lender_id: lender.id, loan_type_id: loanTypeId, rate_type: 'floating' },
+          raw: true
+        });
+        fixedRate = await LenderLoanRates.findOne({
+          where: { lender_id: lender.id, loan_type_id: loanTypeId, rate_type: 'fixed' },
+          raw: true
+        });
+      } catch (_) {}
+
+      const preset = defaultRatePresets[lender.id || (idx + 1)] || { flowLow: "8.5", flowHigh: "11.0", fixLow: "9.5", fixHigh: "12.0" };
+
+      return {
+        lenderId: lender.id,
+        name: lender.name || lender.bank_name || 'Bank',
+        type: lender.type || "Private",
+        flowLow: floatRate ? String(floatRate.min_rate) : preset.flowLow,
+        flowHigh: floatRate ? String(floatRate.max_rate) : preset.flowHigh,
+        fixLow: fixedRate ? String(fixedRate.min_rate) : preset.fixLow,
+        fixHigh: fixedRate ? String(fixedRate.max_rate) : preset.fixHigh,
+        offer: floatRate?.offer || fixedRate?.offer || lender.offer || "Special interest rate offer",
+        visible: true
+      };
+    })
+  );
+};
+
 export const getLenderRates = async (req, res) => {
   try {
-    const { loanTypeShortId } = req.query;
-    
-    let loanTypeId = 1;
-    if (loanTypeShortId) {
-      try {
-        const lt = await LoanType.findOne({ 
-          where: { 
-            short_id: loanTypeShortId
-          } 
-        });
-        if (lt) loanTypeId = lt.id;
-      } catch (_) {}
-    }
-
-    let lenders = [];
-    try {
-      lenders = await Lender.findAll({
-        order: [['name', 'ASC']],
-        raw: true
-      });
-    } catch (_) {}
-
-    if (!lenders || lenders.length === 0) {
-      lenders = [
-        { id: 1, name: 'SBI', type: 'PSU', offer: 'Zero PF on home' },
-        { id: 2, name: 'HDFC Bank', type: 'Private', offer: 'Pre-approved off' },
-        { id: 3, name: 'ICICI Bank', type: 'Private', offer: 'Instant in-princip' },
-        { id: 4, name: 'Axis Bank', type: 'Private', offer: 'Offer text' },
-        { id: 5, name: 'Kotak Mahindra', type: 'Private', offer: 'Offer text' },
-        { id: 6, name: 'Bajaj Finserv', type: 'NBFC/HFC', offer: 'Pre-approved pei' },
-        { id: 7, name: 'PNB Housing', type: 'NBFC/HFC', offer: 'Offer text' },
-        { id: 8, name: 'LIC Housing', type: 'NBFC/HFC', offer: 'Griha Lakshmi Sp' },
-        { id: 9, name: 'Tata Capital', type: 'NBFC/HFC', offer: 'Digital home loan' },
-        { id: 10, name: 'Bank of Baroda', type: 'PSU', offer: 'Offer text' }
-      ];
-    }
-
-    const defaultRatePresets = {
-      1: { flowLow: "7.1", flowHigh: "9.65", fixLow: "8.7", fixHigh: "11.2" },
-      2: { flowLow: "7.2", flowHigh: "9.8", fixLow: "8.8", fixHigh: "11.5" },
-      3: { flowLow: "7.25", flowHigh: "9.9", fixLow: "8.9", fixHigh: "11.6" },
-      4: { flowLow: "7.3", flowHigh: "10.0", fixLow: "9.0", fixHigh: "11.7" },
-      5: { flowLow: "7.4", flowHigh: "9.75", fixLow: "9.0", fixHigh: "11.5" },
-      6: { flowLow: "7.25", flowHigh: "10.5", fixLow: "9.0", fixHigh: "12.0" },
-      7: { flowLow: "7.5", flowHigh: "13.45", fixLow: "9.0", fixHigh: "14.0" },
-      8: { flowLow: "7.5", flowHigh: "10.35", fixLow: "9.5", fixHigh: "12.0" },
-      9: { flowLow: "8.5", flowHigh: "11.0", fixLow: "9.5", fixHigh: "12.0" },
-      10: { flowLow: "7.1", flowHigh: "9.6", fixLow: "8.6", fixHigh: "11.1" }
-    };
-
-    const rates = await Promise.all(
-      lenders.map(async (lender, idx) => {
-        let floatRate = null;
-        let fixedRate = null;
-        try {
-          floatRate = await LenderLoanRates.findOne({
-            where: { lender_id: lender.id, loan_type_id: loanTypeId, rate_type: 'floating' },
-            raw: true
-          });
-          fixedRate = await LenderLoanRates.findOne({
-            where: { lender_id: lender.id, loan_type_id: loanTypeId, rate_type: 'fixed' },
-            raw: true
-          });
-        } catch (_) {}
-
-        const preset = defaultRatePresets[lender.id || (idx + 1)] || { flowLow: "8.5", flowHigh: "11.0", fixLow: "9.5", fixHigh: "12.0" };
-
-        return {
-          lenderId: lender.id,
-          name: lender.name || lender.bank_name || 'Bank',
-          type: lender.type || "Private",
-          flowLow: floatRate ? String(floatRate.min_rate) : preset.flowLow,
-          flowHigh: floatRate ? String(floatRate.max_rate) : preset.flowHigh,
-          fixLow: fixedRate ? String(fixedRate.min_rate) : preset.fixLow,
-          fixHigh: fixedRate ? String(fixedRate.max_rate) : preset.fixHigh,
-          offer: floatRate?.offer || fixedRate?.offer || lender.offer || "Special interest rate offer",
-          visible: true
-        };
-      })
-    );
-
+    const { loanTypeShortId = 'HL' } = req.query;
+    const rates = await getLenderRatesHelper(loanTypeShortId);
     res.json(rates);
   } catch (err) {
     console.error("Get rates error:", err);
@@ -1832,12 +1838,18 @@ export const getDashboardBundle = async (req, res) => {
       }));
     } catch (_) {}
 
+    let ratesData = [];
+    try {
+      ratesData = await getLenderRatesHelper('HL');
+    } catch (_) {}
+
     res.json({
       stats: statsData,
       leads: leadsData,
       brokers: brokersData,
       clients: clientsData,
-      timeline: timelineData
+      timeline: timelineData,
+      rates: ratesData
     });
   } catch (err) {
     console.error("getDashboardBundle error:", err);
@@ -1846,7 +1858,8 @@ export const getDashboardBundle = async (req, res) => {
       leads: [],
       brokers: [],
       clients: [],
-      timeline: []
+      timeline: [],
+      rates: []
     });
   }
 };
