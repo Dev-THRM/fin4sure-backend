@@ -559,14 +559,27 @@ export const updateApplication = async (req, res) => {
     const app = await Loan_Application.findByPk(id);
     if (!app) return res.status(404).json({ message: "Application not found" });
 
-    // 1. Resolve status_id from stage or status name if provided
-    let targetStatusName = stage || status;
+    // 1. Resolve status_id from status or stage name if provided
+    let targetStatusName = status || stage;
+    if (status && status.toLowerCase().trim() === 'rejected') {
+      targetStatusName = 'rejected';
+    }
+    
     let status_id = app.status_id;
     if (targetStatusName) {
+      const nameToFind = targetStatusName.trim();
       try {
         const allStatuses = await Status.findAll({ raw: true });
-        const matched = allStatuses.find(s => s.name && s.name.toLowerCase().trim() === targetStatusName.toLowerCase().trim());
-        if (matched) status_id = matched.id;
+        let matched = allStatuses.find(s => s.name && s.name.toLowerCase().trim() === nameToFind.toLowerCase());
+        if (!matched && status) {
+          matched = allStatuses.find(s => s.name && s.name.toLowerCase().trim() === status.toLowerCase().trim());
+        }
+        if (matched) {
+          status_id = matched.id;
+        } else {
+          const created = await Status.create({ name: nameToFind });
+          if (created) status_id = created.id;
+        }
       } catch (err) {
         console.error("Status lookup error:", err);
       }
