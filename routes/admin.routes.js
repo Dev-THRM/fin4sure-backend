@@ -5,6 +5,7 @@ import {
   allLeads,
   updateBrokerStatus,
   updateBroker,
+  updateBorrower,
   updateLeadStatus,
   updateApplication,
   createAdmin,
@@ -13,6 +14,7 @@ import {
   updateRelationshipManager,
   getAdminAccessDetails,
   allClients,
+  getClientLoans,
   timelineActivity,
   getLenderRates,
   updateLenderRates,
@@ -40,6 +42,7 @@ router.get("/leads", verifyUser, isAdmin, allLeads);
 /* ---------- ACTIONS ---------- */
 router.post("/broker-status", verifyUser, isAdmin, updateBrokerStatus);
 router.post("/update-broker", verifyUser, isAdmin, updateBroker);
+router.post("/update-borrower", verifyUser, isAdmin, updateBorrower);
 router.post("/lead-status", verifyUser, isAdmin, updateLeadStatus);
 router.put("/leads/:id", verifyUser, isAdmin, updateApplication);
 router.post("/leads/:id", verifyUser, isAdmin, updateApplication);
@@ -57,6 +60,7 @@ router.get("/admin-access-details", verifyUser, isAdmin, getAdminAccessDetails);
 
 /* ---------- BORROWERS, TIMELINE, RATES ---------- */
 router.get("/clients", verifyUser, isAdmin, allClients);
+router.get("/client-loans/:userId", verifyUser, isAdmin, getClientLoans);
 router.get("/timeline", verifyUser, isAdmin, timelineActivity);
 router.get("/lender-rates", verifyUser, isAdmin, getLenderRates);
 router.post("/lender-rates", verifyUser, isAdmin, updateLenderRates);

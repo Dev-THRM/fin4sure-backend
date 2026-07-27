@@ -318,6 +318,31 @@ export const updateBroker = async (req, res) => {
 };
 
 /* -----------------------------------------------------
+   ADMIN – UPDATE BORROWER
+----------------------------------------------------- */
+export const updateBorrower = async (req, res) => {
+  try {
+    const { id, name, email, mobile, status } = req.body;
+    if (!id) return res.status(400).json({ message: "Borrower user ID required" });
+
+    const user = await User.findByPk(id);
+    if (!user) return res.status(404).json({ message: "Borrower not found" });
+
+    const updates = {};
+    if (name) updates.name = name;
+    if (email) updates.email = email;
+    if (mobile) updates.mob_no = mobile;
+    if (status) updates.status = status;
+
+    await user.update(updates);
+    res.json({ success: true, message: "Borrower updated successfully" });
+  } catch (err) {
+    console.error("updateBorrower error:", err);
+    res.status(500).json({ message: "Failed to update borrower" });
+  }
+};
+
+/* -----------------------------------------------------
    ADMIN – ALL LEADS WITH FULL INFO
 ----------------------------------------------------- */
 export const allLeads = async (req, res) => {
@@ -1048,6 +1073,14 @@ export const allClients = async (req, res) => {
       }
     }
 
+    // Pre-load all statuses once
+    let allStatuses = [];
+    try { allStatuses = await Status.findAll({ raw: true }); } catch (_) {}
+    const statusMap = new Map(allStatuses.map(s => [s.id, s.name || '']));
+
+    // Stage priority for bestStage calculation
+    const STAGE_PRIORITY = ['Disbursed', 'Sanction', 'Legal', 'Submitted', 'Credit', 'Docs', 'Applied'];
+
     const enrichedClients = await Promise.all(
       clients.map(async (client) => {
         let applications = [];
@@ -1057,39 +1090,59 @@ export const allClients = async (req, res) => {
           if (borrower) {
             applications = await Loan_Application.findAll({
               where: { borrower_id: borrower.id },
+              order: [['createdAt', 'DESC']],
               raw: true
             });
           }
         } catch (_) {}
-        
-        let clientStatus = 'active';
+
         const loanCount = applications.length;
+        let clientStatus = client.status || 'active';
+        let bestStage = 'Applied';
+        let appliedLender = '-';
 
         if (loanCount > 0) {
-          const statuses = await Promise.all(applications.map(async (app) => {
-            if (!app.status_id) return '';
-            try {
-              const sObj = await Status.findByPk(app.status_id, { raw: true });
-              return sObj ? sObj.name.toLowerCase() : '';
-            } catch (_) { return ''; }
+          const appStatuses = applications.map(app => ({
+            name: app.status_id ? (statusMap.get(app.status_id) || 'Applied') : 'Applied',
+            lenderId: app.lender_id
           }));
 
-          const allRejected = statuses.length > 0 && statuses.every(st => st === 'rejected');
-          const noActive = statuses.length > 0 && statuses.every(st => ['disbursed', 'completed', 'rejected'].includes(st));
-          
-          if (allRejected) {
-            clientStatus = 'rejected';
-          } else if (noActive) {
-            clientStatus = 'inactive';
+          // Compute best stage (highest progress)
+          for (const stage of STAGE_PRIORITY) {
+            if (appStatuses.some(s => s.name.toLowerCase() === stage.toLowerCase())) {
+              bestStage = stage;
+              break;
+            }
+          }
+
+          // Compute client status from statuses
+          const stNames = appStatuses.map(s => s.name.toLowerCase());
+          const allRejected = stNames.length > 0 && stNames.every(st => st === 'rejected');
+          const noActive = stNames.length > 0 && stNames.every(st => ['disbursed', 'completed', 'rejected'].includes(st));
+          if (allRejected) clientStatus = 'rejected';
+          else if (noActive) clientStatus = 'inactive';
+
+          // Get lender name from most recent loan
+          const latestApp = applications[0];
+          if (latestApp && latestApp.lender_id) {
+            try {
+              const lender = await Lender.findByPk(latestApp.lender_id, { raw: true });
+              if (lender) appliedLender = lender.name || lender.bank_name || 'SBI';
+            } catch (_) {}
           }
         }
 
         return {
-          ...client,
-          loanCount: loanCount,
-          status: client.status || clientStatus,
-          address: borrower ? borrower.address || "-" : "-",
-          dob: borrower ? borrower.dob || "-" : "-"
+          id: client.id,
+          name: client.name || '-',
+          email: client.email || '-',
+          number: client.mob_no || client.number || '-',
+          status: clientStatus,
+          loanCount,
+          bestStage,
+          appliedLender,
+          borrowerId: borrower ? borrower.id : null,
+          createdAt: client.createdAt
         };
       })
     );
@@ -1097,6 +1150,52 @@ export const allClients = async (req, res) => {
   } catch (e) {
     console.error("allClients error:", e);
     res.status(500).json({ message: "Failed to fetch clients" });
+  }
+};
+
+/* -----------------------------------------------------
+   ADMIN – CLIENT LOANS LIST
+----------------------------------------------------- */
+export const getClientLoans = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Pre-load statuses & lenders
+    let allStatuses = [];
+    let allLenders = [];
+    let allLoanTypes = [];
+    try { allStatuses = await Status.findAll({ raw: true }); } catch (_) {}
+    try { allLenders = await Lender.findAll({ raw: true }); } catch (_) {}
+    try { allLoanTypes = await LoanType.findAll({ raw: true }); } catch (_) {}
+
+    const statusMap = new Map(allStatuses.map(s => [s.id, s.name]));
+    const lenderMap = new Map(allLenders.map(l => [l.id, l.name || l.bank_name]));
+    const loanTypeMap = new Map(allLoanTypes.map(lt => [lt.id, lt.name]));
+
+    const borrower = await Borrower.findOne({ where: { user_id: userId }, raw: true });
+    if (!borrower) return res.json([]);
+
+    const applications = await Loan_Application.findAll({
+      where: { borrower_id: borrower.id },
+      order: [['createdAt', 'DESC']],
+      raw: true
+    });
+
+    const loans = applications.map(app => ({
+      id: app.id,
+      application_no: app.application_no ? `F4S-${app.application_no}` : `F4S-${2000 + app.id}`,
+      loanType: loanTypeMap.get(app.loan_type_id) || 'Home Loan',
+      loanAmount: app.loan_amount || 0,
+      lender: lenderMap.get(app.lender_id) || '-',
+      status: statusMap.get(app.status_id) || 'Applied',
+      tenure: app.tenure || '-',
+      createdAt: app.createdAt
+    }));
+
+    res.json(loans);
+  } catch (e) {
+    console.error("getClientLoans error:", e);
+    res.status(500).json({ message: "Failed to fetch client loans" });
   }
 };
 
