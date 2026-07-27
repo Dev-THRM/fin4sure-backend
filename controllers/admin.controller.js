@@ -429,7 +429,7 @@ export const updateLeadStatus = async (req, res) => {
 ----------------------------------------------------- */
 export const updateApplication = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = req.body?.id || req.params?.id;
     const { status, stage, name, lender, loan_amount, tenure, loan_purpose, remark } = req.body;
 
     const app = await Loan_Application.findByPk(id);
