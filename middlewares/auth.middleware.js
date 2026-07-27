@@ -48,29 +48,33 @@ export const verifyUser = async (req, res, next) => {
 };
 
 export const isAdmin = (req, res, next) => {
-  if (req.user?.role !== 3) {
-    return res.status(403).json({ message: "Admin access only" });
+  const r = req.user?.role;
+  if (Number(r) === 3 || r === "admin" || r === "3") {
+    return next();
   }
-  next();
+  return res.status(403).json({ message: "Admin access only" });
 };
 
 export const isBroker = (req, res, next) => {
-  if (req.user?.role !== 2) {
-    return res.status(403).json({ message: "Broker access only" });
+  const r = req.user?.role;
+  if (Number(r) === 2 || r === "partner" || r === "broker" || r === "2") {
+    return next();
   }
-  next();
+  return res.status(403).json({ message: "Broker access only" });
 };
 
 export const isClient = (req, res, next) => {
-  if (req.user?.role !== 1) {
-    return res.status(403).json({ message: "Client access only" });
+  const r = req.user?.role;
+  if (Number(r) === 1 || r === "borrower" || r === "client" || r === "1") {
+    return next();
   }
-  next();
+  return res.status(403).json({ message: "Client access only" });
 };
 
 export const isClientOrBroker = (req, res, next) => {
-  if (req.user?.role !== 1 && req.user?.role !== 2) {
-    return res.status(403).json({ message: "Client or Broker access only" });
+  const r = req.user?.role;
+  if (Number(r) === 1 || Number(r) === 2 || r === "borrower" || r === "partner" || r === "broker") {
+    return next();
   }
-  next();
+  return res.status(403).json({ message: "Client or Broker access only" });
 };
