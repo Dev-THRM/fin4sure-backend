@@ -40,6 +40,7 @@ router.get("/leads", verifyUser, isAdmin, allLeads);
 router.post("/broker-status", verifyUser, isAdmin, updateBrokerStatus);
 router.post("/lead-status", verifyUser, isAdmin, updateLeadStatus);
 router.put("/leads/:id", verifyUser, isAdmin, updateApplication);
+router.post("/leads/:id", verifyUser, isAdmin, updateApplication);
 
 /* ---------- ADMIN BOOTSTRAP ---------- */
 router.post("/create-admin", createAdmin);
