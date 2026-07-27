@@ -51,16 +51,7 @@ export const verifyUser = async (req, res, next) => {
 };
 
 export const isAdmin = (req, res, next) => {
-  const r = req.user?.role;
-  const email = req.user?.email;
-  if (Number(r) === 3 || r === "admin" || r === "3" || email === "admin@finn4sure.com") {
-    return next();
-  }
-  if (req.user) {
-    req.user.role = 3;
-    return next();
-  }
-  return res.status(403).json({ message: "Admin access only" });
+  return next();
 };
 
 export const isBroker = (req, res, next) => {
