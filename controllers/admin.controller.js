@@ -1136,6 +1136,7 @@ export const allClients = async (req, res) => {
           if (lenderNames.length > 0) {
             appliedLender = lenderNames.join(', ');
           }
+        }
 
         return {
           id: client.id,
