@@ -419,7 +419,14 @@ export const allLeads = async (req, res) => {
 
       if (!clientName) clientName = `Application #${app.id}`;
 
-      const rawStatus = app.status_name || "in progress";
+      const rawStatus = app.status_name || "Applied";
+      const lowerSt = rawStatus.toLowerCase().trim();
+      const normalizedStatus = ['disbursed', 'completed'].includes(lowerSt)
+        ? 'disbursed'
+        : lowerSt === 'rejected'
+        ? 'rejected'
+        : 'in-progress';
+
       const formattedAppNo = app.application_no
         ? (String(app.application_no).startsWith('F4S') ? app.application_no : `F4S-${app.application_no}`)
         : `F4S-${2000 + app.id}`;
@@ -435,7 +442,7 @@ export const allLeads = async (req, res) => {
         district: app.client_district || "-",
         dob: app.client_dob || "-",
         product: app.loan_type_name || "Home Loan",
-        status: rawStatus.toLowerCase(),
+        status: normalizedStatus,
         stage: rawStatus,
         lender: app.client_preference || "SBI",
         source: app.partner_name || "Direct",
@@ -677,14 +684,19 @@ export const updateApplication = async (req, res) => {
       } catch (_) {}
     }
 
-    let finalStatusName = "in progress";
+    let finalStatusName = "in-progress";
     let finalStageName = "Applied";
     if (app.status_id) {
       try {
         const sObj = await Status.findByPk(app.status_id, { raw: true });
         if (sObj) {
-          finalStatusName = sObj.name.toLowerCase();
+          const lowerSt = sObj.name.toLowerCase().trim();
           finalStageName = sObj.name;
+          finalStatusName = ['disbursed', 'completed'].includes(lowerSt)
+            ? 'disbursed'
+            : lowerSt === 'rejected'
+            ? 'rejected'
+            : 'in-progress';
         }
       } catch (_) {}
     }
@@ -1569,14 +1581,19 @@ export const getDashboardBundle = async (req, res) => {
           } catch (_) {}
         }
 
-        let statusName = "in progress";
+        let statusName = "in-progress";
         let stageName = "Applied";
         if (app.status_id) {
           try {
             const sObj = await Status.findByPk(app.status_id, { raw: true });
             if (sObj) {
-              statusName = sObj.name.toLowerCase();
+              const lowerSt = sObj.name.toLowerCase().trim();
               stageName = sObj.name;
+              statusName = ['disbursed', 'completed'].includes(lowerSt)
+                ? 'disbursed'
+                : lowerSt === 'rejected'
+                ? 'rejected'
+                : 'in-progress';
             }
           } catch (_) {}
         }
