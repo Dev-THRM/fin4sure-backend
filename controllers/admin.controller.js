@@ -313,7 +313,7 @@ export const allLeads = async (req, res) => {
         product: app.loan_type_name || "Home Loan",
         status: rawStatus.toLowerCase(),
         stage: rawStatus,
-        lender: "SBI",
+        lender: app.client_preference || "SBI",
         source: app.partner_name || "Direct",
         client_preference: app.client_preference,
         partner_id: app.partner_id,
@@ -477,6 +477,7 @@ export const updateApplication = async (req, res) => {
     await app.update({
       status_id,
       lender_id,
+      client_preference: lender || app.client_preference,
       loan_amount: loan_amount !== undefined && loan_amount !== "" ? parseFloat(loan_amount) : app.loan_amount,
       tenure: tenure !== undefined && tenure !== "" ? parseInt(tenure) : app.tenure,
       loan_purpose: remark !== undefined ? remark : (loan_purpose !== undefined ? loan_purpose : app.loan_purpose),
@@ -1293,7 +1294,7 @@ export const getDashboardBundle = async (req, res) => {
           } catch (_) {}
         }
 
-        let lenderName = "SBI";
+        let lenderName = app.client_preference || "SBI";
         if (app.lender_id) {
           try {
             const lObj = await Lender.findByPk(app.lender_id, { raw: true });
