@@ -5,10 +5,6 @@
   RewriteRule .* - [E=nconc:1]
 </IfModule>
 
-<LimitExcept GET POST OPTIONS PUT DELETE PATCH>
-  Allow from all
-</LimitExcept>
-
 <IfModule mod_security.c>
   SecFilterEngine Off
   SecFilterScanPOST Off
