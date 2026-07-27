@@ -152,6 +152,7 @@ const startServer = async () => {
     try {
       await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN profile_status ENUM('Active', 'Inactive', 'Completed', 'Incomplete', 'Under Review', 'Rejected') DEFAULT 'Active';");
       await sequelize.query("ALTER TABLE users MODIFY COLUMN status VARCHAR(255) DEFAULT 'active';");
+      await sequelize.query("ALTER TABLE loan_applications ADD COLUMN lender_id INT NULL;");
       console.log("Database schema updated.");
     } catch (err) {
       console.log("Database schema alter notice:", err.message);

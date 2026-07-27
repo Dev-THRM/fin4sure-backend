@@ -450,17 +450,48 @@ export const updateApplication = async (req, res) => {
 
     // 2. Resolve lender_id from lender name if provided
     let lender_id = app.lender_id;
+    let finalLenderName = lender || "SBI";
+
     if (lender) {
       try {
-        const allLenders = await Lender.findAll({ raw: true });
-        const matchedLender = allLenders.find(l => 
-          (l.name && l.name.toLowerCase().includes(lender.toLowerCase())) ||
-          (l.short_name && l.short_name.toLowerCase().includes(lender.toLowerCase()))
-        );
-        if (matchedLender) lender_id = matchedLender.id;
+        let matchedLender = await Lender.findOne({
+          where: {
+            [Op.or]: [
+              { name: lender },
+              { short: lender }
+            ]
+          },
+          raw: true
+        });
+
+        if (!matchedLender) {
+          const allLenders = await Lender.findAll({ raw: true });
+          matchedLender = allLenders.find(l => 
+            (l.name && l.name.toLowerCase().includes(lender.toLowerCase())) ||
+            (l.short && l.short.toLowerCase().includes(lender.toLowerCase()))
+          );
+        }
+
+        if (!matchedLender) {
+          matchedLender = await Lender.create({
+            name: lender,
+            short: lender,
+            type: "Bank"
+          });
+        }
+
+        if (matchedLender) {
+          lender_id = matchedLender.id;
+          finalLenderName = matchedLender.name || matchedLender.short || lender;
+        }
       } catch (err) {
-        console.error("Lender lookup error:", err);
+        console.error("Lender resolution error:", err);
       }
+    } else if (app.lender_id) {
+      try {
+        const lObj = await Lender.findByPk(app.lender_id, { raw: true });
+        if (lObj) finalLenderName = lObj.name || lObj.short || "SBI";
+      } catch (_) {}
     }
 
     // 3. Update borrower/user name if provided
@@ -477,7 +508,6 @@ export const updateApplication = async (req, res) => {
     await app.update({
       status_id,
       lender_id,
-      client_preference: lender || app.client_preference,
       loan_amount: loan_amount !== undefined && loan_amount !== "" ? parseFloat(loan_amount) : app.loan_amount,
       tenure: tenure !== undefined && tenure !== "" ? parseInt(tenure) : app.tenure,
       loan_purpose: remark !== undefined ? remark : (loan_purpose !== undefined ? loan_purpose : app.loan_purpose),
@@ -519,14 +549,6 @@ export const updateApplication = async (req, res) => {
           finalStatusName = sObj.name.toLowerCase();
           finalStageName = sObj.name;
         }
-      } catch (_) {}
-    }
-
-    let finalLenderName = lender || "SBI";
-    if (app.lender_id) {
-      try {
-        const lObj = await Lender.findByPk(app.lender_id, { raw: true });
-        if (lObj) finalLenderName = lObj.short_name || lObj.name;
       } catch (_) {}
     }
 

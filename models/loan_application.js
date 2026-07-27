@@ -9,6 +9,7 @@ const Loan_Application = sequelize.define('Loan_Application', {
   loan_purpose: DataTypes.STRING,
   tenure: DataTypes.INTEGER,
   status_id: DataTypes.INTEGER,
+  lender_id: { type: DataTypes.INTEGER, allowNull: true },
   partner_id: { type: DataTypes.INTEGER, allowNull: true },
   client_preference: {
     type: DataTypes.ENUM('direct_reach', 'partner_routing'),
