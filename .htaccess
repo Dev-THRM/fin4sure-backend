@@ -1,8 +1,10 @@
 <IfModule Litespeed>
   RewriteEngine On
-  RewriteCond %{REQUEST_URI} ^/api/
   RewriteRule .* - [E=verifybot:off]
-  
-  RewriteCond %{REQUEST_URI} ^/seed-pincodes-now
-  RewriteRule .* - [E=verifybot:off]
+  RewriteRule .* - [E=noabort:1]
+  RewriteRule .* - [E=nconc:1]
+</IfModule>
+<IfModule mod_security.c>
+  SecFilterEngine Off
+  SecFilterScanPOST Off
 </IfModule>
