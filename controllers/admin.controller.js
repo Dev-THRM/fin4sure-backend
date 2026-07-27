@@ -195,6 +195,7 @@ export const userCount = async (req, res) => {
     let inProgressCount = 0;
     let completedCount = 0;
     let rejectedCount = 0;
+    let pendingCount = 0;
     let loanVolume = 0;
     let disbursedAmount = 0;
 
@@ -212,6 +213,8 @@ export const userCount = async (req, res) => {
           disbursedAmount += (parseFloat(app.loan_amount) || 0);
         } else if (stName === 'rejected') {
           rejectedCount++;
+        } else if (['applied', 'pending'].includes(stName)) {
+          pendingCount++;
         } else {
           inProgressCount++;
         }
@@ -231,6 +234,7 @@ export const userCount = async (req, res) => {
       inProgressCount,
       completedCount,
       rejectedCount,
+      pendingCount,
       loanVolume,
       disbursedAmount,
       activeBorrowers: totalClients,
@@ -1444,6 +1448,7 @@ export const getDashboardBundle = async (req, res) => {
       let inProgressCount = 0;
       let completedCount = 0;
       let rejectedCount = 0;
+      let pendingCount = 0;
       let loanVolume = 0;
       let disbursedAmount = 0;
 
@@ -1461,6 +1466,8 @@ export const getDashboardBundle = async (req, res) => {
             disbursedAmount += (parseFloat(app.loan_amount) || 0);
           } else if (stName === 'rejected') {
             rejectedCount++;
+          } else if (['applied', 'pending'].includes(stName)) {
+            pendingCount++;
           } else {
             inProgressCount++;
           }
@@ -1480,6 +1487,7 @@ export const getDashboardBundle = async (req, res) => {
         inProgressCount,
         completedCount,
         rejectedCount,
+        pendingCount,
         loanVolume,
         disbursedAmount,
         activeBorrowers: totalClients,
