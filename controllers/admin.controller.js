@@ -267,6 +267,57 @@ export const brokersWithFullData = async (req, res) => {
 };
 
 /* -----------------------------------------------------
+   ADMIN – UPDATE BROKER (FULL EDIT)
+----------------------------------------------------- */
+export const updateBroker = async (req, res) => {
+  try {
+    const { id, name, city, mobile, status } = req.body;
+    if (!id) return res.status(400).json({ message: "Partner ID required" });
+
+    // Find the user (partner)
+    const user = await User.findByPk(id);
+    if (!user) {
+      // Try by partner table
+      const partner = await Partner.findByPk(id);
+      if (!partner) return res.status(404).json({ message: "Partner not found" });
+      const linkedUser = await User.findByPk(partner.user_id);
+      if (linkedUser) {
+        const updates = {};
+        if (name) updates.name = name;
+        if (mobile) updates.number = mobile;
+        if (status) updates.status = status;
+        await linkedUser.update(updates);
+      }
+      res.json({ success: true, message: "Partner updated" });
+      return;
+    }
+
+    const updates = {};
+    if (name) updates.name = name;
+    if (mobile) updates.number = mobile;
+    if (status) updates.status = status;
+
+    await user.update(updates);
+
+    // Update city in partners table if provided
+    if (city) {
+      try {
+        const partner = await Partner.findOne({ where: { user_id: id } });
+        if (partner) {
+          // Store city as address if no city_id mapping available
+          await partner.update({ address: city });
+        }
+      } catch (_) {}
+    }
+
+    res.json({ success: true, message: "Partner updated successfully" });
+  } catch (err) {
+    console.error("updateBroker error:", err);
+    res.status(500).json({ message: "Failed to update partner" });
+  }
+};
+
+/* -----------------------------------------------------
    ADMIN – ALL LEADS WITH FULL INFO
 ----------------------------------------------------- */
 export const allLeads = async (req, res) => {

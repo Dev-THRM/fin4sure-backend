@@ -4,6 +4,7 @@ import {
   brokersWithFullData,
   allLeads,
   updateBrokerStatus,
+  updateBroker,
   updateLeadStatus,
   updateApplication,
   createAdmin,
@@ -38,6 +39,7 @@ router.get("/leads", verifyUser, isAdmin, allLeads);
 
 /* ---------- ACTIONS ---------- */
 router.post("/broker-status", verifyUser, isAdmin, updateBrokerStatus);
+router.post("/update-broker", verifyUser, isAdmin, updateBroker);
 router.post("/lead-status", verifyUser, isAdmin, updateLeadStatus);
 router.put("/leads/:id", verifyUser, isAdmin, updateApplication);
 router.post("/leads/:id", verifyUser, isAdmin, updateApplication);
