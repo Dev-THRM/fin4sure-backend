@@ -1073,10 +1073,13 @@ export const allClients = async (req, res) => {
       }
     }
 
-    // Pre-load all statuses once
+    // Pre-load all statuses and lenders once
     let allStatuses = [];
+    let allLenders = [];
     try { allStatuses = await Status.findAll({ raw: true }); } catch (_) {}
+    try { allLenders = await Lender.findAll({ raw: true }); } catch (_) {}
     const statusMap = new Map(allStatuses.map(s => [s.id, s.name || '']));
+    const lenderMap = new Map(allLenders.map(l => [l.id, l.name || '']));
 
     // Stage priority for bestStage calculation
     const STAGE_PRIORITY = ['Disbursed', 'Sanction', 'Legal', 'Submitted', 'Credit', 'Docs', 'Applied'];
@@ -1122,15 +1125,17 @@ export const allClients = async (req, res) => {
           if (allRejected) clientStatus = 'rejected';
           else if (noActive) clientStatus = 'inactive';
 
-          // Get lender from first loan that has lender_id assigned
-          const appWithLender = applications.find(a => a.lender_id);
-          if (appWithLender) {
-            try {
-              const lender = await Lender.findByPk(appWithLender.lender_id, { raw: true });
-              if (lender) appliedLender = lender.name || '-';
-            } catch (_) {}
+          // Get all unique lenders across all applications for this borrower
+          const lenderNames = [];
+          for (const a of applications) {
+            if (a.lender_id && lenderMap.has(a.lender_id)) {
+              const lName = lenderMap.get(a.lender_id);
+              if (lName && !lenderNames.includes(lName)) lenderNames.push(lName);
+            }
           }
-        }
+          if (lenderNames.length > 0) {
+            appliedLender = lenderNames.join(', ');
+          }
 
         return {
           id: client.id,
@@ -1667,10 +1672,16 @@ export const getDashboardBundle = async (req, res) => {
             if (allRejected) clientStatus = 'rejected';
             else if (noActive) clientStatus = 'inactive';
 
-            // Lender from first loan that has one assigned
-            const appWithLender = applications.find(a => a.lender_id);
-            if (appWithLender) {
-              appliedLender = lenderMapC.get(appWithLender.lender_id) || '-';
+            // Get all unique lenders across all applications for this borrower
+            const lenderNames = [];
+            for (const a of applications) {
+              if (a.lender_id && lenderMapC.has(a.lender_id)) {
+                const lName = lenderMapC.get(a.lender_id);
+                if (lName && !lenderNames.includes(lName)) lenderNames.push(lName);
+              }
+            }
+            if (lenderNames.length > 0) {
+              appliedLender = lenderNames.join(', ');
             }
           }
 
