@@ -1,3 +1,4 @@
+import { Op } from "sequelize";
 import Lead from "../models/lead.model.js";
 import Partner from "../models/partner.model.js";
 import City from "../models/city.js";
@@ -13,113 +14,128 @@ import Lender from "../models/lender.js";
 import LenderLoanRates from "../models/lender_loan_rates.js";
 import LoanType from "../models/loan_type.js";
 import PlatformSetting from "../models/platform_settings.model.js";
-
-//const User = UserInit(sequelize, DataTypes);
 import Borrower from "../models/borrower.js";
 
 const getBrokersList = async () => {
-  const users = await User.findAll({
-    where: { role_id: 2 },
-    attributes: { exclude: ['password_hash'] },
-    raw: true
-  });
+  try {
+    let users = await User.findAll({
+      where: {
+        [Op.or]: [{ role_id: 2 }, { role_id: "2" }]
+      },
+      attributes: { exclude: ['password_hash'] },
+      raw: true
+    });
 
-  return await Promise.all(
-    users.map(async (user) => {
-      let partner = null;
-      let cityName = "";
-      let partnerIdVal = null;
-      try {
-        partner = await Partner.findOne({ where: { user_id: user.id }, raw: true });
-        if (partner) {
-          partnerIdVal = partner.id;
-          if (partner.city_id) {
-            const city = await City.findByPk(partner.city_id, { raw: true });
-            if (city) cityName = city.name;
-          }
-        }
-      } catch (_) {}
-
-      let referredApps = [];
-      if (partnerIdVal) {
-        try {
-          referredApps = await Loan_Application.findAll({
-            where: { partner_id: partnerIdVal },
-            raw: true
-          });
-        } catch (_) {}
+    if (!users || users.length === 0) {
+      const partners = await Partner.findAll({ raw: true });
+      const pUserIds = partners.map(p => p.user_id).filter(Boolean);
+      if (pUserIds.length > 0) {
+        users = await User.findAll({ where: { id: pUserIds }, attributes: { exclude: ['password_hash'] }, raw: true });
       }
+    }
 
-      const clientsFromApps = await Promise.all(referredApps.map(async (app) => {
-        let clientName = null;
-        let clientEmail = null;
-        let clientPhone = null;
-
-        if (app.borrower_id) {
-          try {
-            const borrowerObj = await Borrower.findByPk(app.borrower_id, { raw: true });
-            if (borrowerObj && borrowerObj.user_id) {
-              const uObj = await User.findByPk(borrowerObj.user_id, { raw: true });
-              if (uObj) {
-                clientName = uObj.name;
-                clientEmail = uObj.email;
-                clientPhone = uObj.mob_no;
-              }
+    return await Promise.all(
+      users.map(async (user) => {
+        let partner = null;
+        let cityName = "";
+        let partnerIdVal = null;
+        try {
+          partner = await Partner.findOne({ where: { user_id: user.id }, raw: true });
+          if (partner) {
+            partnerIdVal = partner.id;
+            if (partner.city_id) {
+              const city = await City.findByPk(partner.city_id, { raw: true });
+              if (city) cityName = city.name;
             }
+          }
+        } catch (_) {}
+
+        let referredApps = [];
+        if (partnerIdVal) {
+          try {
+            referredApps = await Loan_Application.findAll({
+              where: { partner_id: partnerIdVal },
+              raw: true
+            });
           } catch (_) {}
         }
 
-        if (!clientName && app.loan_purpose) {
-          try {
-            const lpStr = String(app.loan_purpose);
-            const parts = lpStr.split(/ \u2014 | \u2013 | - /);
-            if (parts[1]) {
-              const subParts = parts[1].split(' (');
-              clientName = subParts[0] ? subParts[0].trim() : null;
-              if (subParts[1]) {
-                clientPhone = subParts[1].replace(')', '').trim();
-              }
-            }
-          } catch (_) {}
-        }
+        const clientsFromApps = await Promise.all(referredApps.map(async (app) => {
+          let clientName = null;
+          let clientEmail = null;
+          let clientPhone = null;
 
-        if (!clientName) return null;
-        if (clientName === user.name) return null;
+          if (app.borrower_id) {
+            try {
+              const borrowerObj = await Borrower.findByPk(app.borrower_id, { raw: true });
+              if (borrowerObj && borrowerObj.user_id) {
+                const uObj = await User.findByPk(borrowerObj.user_id, { raw: true });
+                if (uObj) {
+                  clientName = uObj.name;
+                  clientEmail = uObj.email;
+                  clientPhone = uObj.mob_no;
+                }
+              }
+            } catch (_) {}
+          }
+
+          if (!clientName && app.loan_purpose) {
+            try {
+              const lpStr = String(app.loan_purpose);
+              const parts = lpStr.split(/ \u2014 | \u2013 | - /);
+              if (parts[1]) {
+                const subParts = parts[1].split(' (');
+                clientName = subParts[0] ? subParts[0].trim() : null;
+                if (subParts[1]) {
+                  clientPhone = subParts[1].replace(')', '').trim();
+                }
+              }
+            } catch (_) {}
+          }
+
+          if (!clientName) return null;
+          if (clientName === user.name) return null;
+
+          return {
+            id: `app_${app.id}`,
+            name: clientName,
+            email: clientEmail || `${clientName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+            number: clientPhone || "-",
+            dob: "-",
+            address: "-"
+          };
+        }));
+
+        const linkedClients = clientsFromApps.filter(Boolean);
+        const countLeads = partnerIdVal ? await Loan_Application.count({ where: { partner_id: partnerIdVal } }) : 0;
 
         return {
-          id: `app_${app.id}`,
-          name: clientName,
-          email: clientEmail || `${clientName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
-          number: clientPhone || "-",
-          dob: "-",
-          address: "-"
+          id: user.id,
+          brokerId: String(user.id),
+          name: user.name,
+          email: user.email,
+          number: user.mob_no,
+          status: user.status || "active",
+          dob: partner ? partner.dob || "1990-01-01" : "1990-01-01",
+          address: partner ? partner.address || cityName : cityName,
+          city: cityName,
+          state: "India",
+          district: cityName,
+          pincode: "000000",
+          clients: linkedClients,
+          clientCount: linkedClients.length,
+          leadCount: countLeads,
+          leads: referredApps,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+          statusUpdatedAt: user.updatedAt
         };
-      }));
-
-      const linkedClients = clientsFromApps.filter(Boolean);
-      const countLeads = partnerIdVal ? await Loan_Application.count({ where: { partner_id: partnerIdVal } }) : 0;
-
-      return {
-        id: user.id,
-        brokerId: String(user.id),
-        name: user.name,
-        email: user.email,
-        number: user.mob_no,
-        status: user.status,
-        dob: partner ? partner.dob || "1990-01-01" : "1990-01-01",
-        address: partner ? partner.address || cityName : cityName,
-        state: "India",
-        district: cityName,
-        pincode: "000000",
-        clients: linkedClients,
-        clientCount: linkedClients.length,
-        leadCount: countLeads,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-        statusUpdatedAt: user.updatedAt
-      };
-    })
-  );
+      })
+    );
+  } catch (e) {
+    console.error("getBrokersList error:", e);
+    return [];
+  }
 };
 
 /* -----------------------------------------------------
@@ -898,12 +914,22 @@ export const getAdminAccessDetails = async (req, res) => {
 ----------------------------------------------------- */
 export const allClients = async (req, res) => {
   try {
-    const clients = await User.findAll({
-      where: { role_id: 1 },
+    let clients = await User.findAll({
+      where: {
+        [Op.or]: [{ role_id: 1 }, { role_id: "1" }, { role_id: null }]
+      },
       order: [['createdAt', 'DESC']],
       raw: true
     });
-    
+
+    if (!clients || clients.length === 0) {
+      const borrowers = await Borrower.findAll({ raw: true });
+      const bUserIds = borrowers.map(b => b.user_id).filter(Boolean);
+      if (bUserIds.length > 0) {
+        clients = await User.findAll({ where: { id: bUserIds }, raw: true });
+      }
+    }
+
     const enrichedClients = await Promise.all(
       clients.map(async (client) => {
         let applications = [];
@@ -950,9 +976,9 @@ export const allClients = async (req, res) => {
       })
     );
     res.json(enrichedClients);
-  } catch (err) {
-    console.error("All clients error:", err);
-    res.json([]);
+  } catch (e) {
+    console.error("allClients error:", e);
+    res.status(500).json({ message: "Failed to fetch clients" });
   }
 };
 
