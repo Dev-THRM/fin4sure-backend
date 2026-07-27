@@ -1122,12 +1122,12 @@ export const allClients = async (req, res) => {
           if (allRejected) clientStatus = 'rejected';
           else if (noActive) clientStatus = 'inactive';
 
-          // Get lender name from most recent loan
-          const latestApp = applications[0];
-          if (latestApp && latestApp.lender_id) {
+          // Get lender from first loan that has lender_id assigned
+          const appWithLender = applications.find(a => a.lender_id);
+          if (appWithLender) {
             try {
-              const lender = await Lender.findByPk(latestApp.lender_id, { raw: true });
-              if (lender) appliedLender = lender.name || lender.bank_name || 'SBI';
+              const lender = await Lender.findByPk(appWithLender.lender_id, { raw: true });
+              if (lender) appliedLender = lender.name || '-';
             } catch (_) {}
           }
         }
@@ -1616,6 +1616,16 @@ export const getDashboardBundle = async (req, res) => {
         order: [['createdAt', 'DESC']],
         raw: true
       });
+
+      // Pre-load all statuses and lenders once
+      let allStatusesC = [];
+      let allLendersC = [];
+      try { allStatusesC = await Status.findAll({ raw: true }); } catch (_) {}
+      try { allLendersC = await Lender.findAll({ raw: true }); } catch (_) {}
+      const statusMapC = new Map(allStatusesC.map(s => [s.id, s.name || '']));
+      const lenderMapC = new Map(allLendersC.map(l => [l.id, l.name || l.bank_name || '']));
+      const STAGE_PRIORITY = ['Disbursed', 'Sanction', 'Legal', 'Submitted', 'Credit', 'Docs', 'Applied'];
+
       clientsData = await Promise.all(
         clients.map(async (client) => {
           let applications = [];
@@ -1625,39 +1635,56 @@ export const getDashboardBundle = async (req, res) => {
             if (borrower) {
               applications = await Loan_Application.findAll({
                 where: { borrower_id: borrower.id },
+                order: [['createdAt', 'DESC']],
                 raw: true
               });
             }
           } catch (_) {}
-          
-          let clientStatus = 'active';
+
           const loanCount = applications.length;
+          let clientStatus = client.status || 'active';
+          let bestStage = 'Applied';
+          let appliedLender = '-';
 
           if (loanCount > 0) {
-            const statuses = await Promise.all(applications.map(async (app) => {
-              if (!app.status_id) return '';
-              try {
-                const sObj = await Status.findByPk(app.status_id, { raw: true });
-                return sObj ? sObj.name.toLowerCase() : '';
-              } catch (_) { return ''; }
+            const appStatuses = applications.map(app => ({
+              name: app.status_id ? (statusMapC.get(app.status_id) || 'Applied') : 'Applied',
+              lenderId: app.lender_id
             }));
 
-            const allRejected = statuses.length > 0 && statuses.every(st => st === 'rejected');
-            const noActive = statuses.length > 0 && statuses.every(st => ['disbursed', 'completed', 'rejected'].includes(st));
-            
-            if (allRejected) {
-              clientStatus = 'rejected';
-            } else if (noActive) {
-              clientStatus = 'inactive';
+            // Best stage (highest progress)
+            for (const stage of STAGE_PRIORITY) {
+              if (appStatuses.some(s => s.name.toLowerCase() === stage.toLowerCase())) {
+                bestStage = stage;
+                break;
+              }
+            }
+
+            // Client status
+            const stNames = appStatuses.map(s => s.name.toLowerCase());
+            const allRejected = stNames.length > 0 && stNames.every(st => st === 'rejected');
+            const noActive = stNames.length > 0 && stNames.every(st => ['disbursed', 'completed', 'rejected'].includes(st));
+            if (allRejected) clientStatus = 'rejected';
+            else if (noActive) clientStatus = 'inactive';
+
+            // Lender from first loan that has one assigned
+            const appWithLender = applications.find(a => a.lender_id);
+            if (appWithLender) {
+              appliedLender = lenderMapC.get(appWithLender.lender_id) || '-';
             }
           }
 
           return {
-            ...client,
-            loanCount: loanCount,
-            status: client.status || clientStatus,
-            address: borrower ? borrower.address || "-" : "-",
-            dob: borrower ? borrower.dob || "-" : "-"
+            id: client.id,
+            name: client.name || '-',
+            email: client.email || '-',
+            number: client.mob_no || client.number || '-',
+            status: clientStatus,
+            loanCount,
+            bestStage,
+            appliedLender,
+            borrowerId: borrower ? borrower.id : null,
+            createdAt: client.createdAt
           };
         })
       );
