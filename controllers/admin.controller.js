@@ -390,6 +390,31 @@ export const updateBorrower = async (req, res) => {
     if (status) updates.status = status;
 
     await user.update(updates);
+
+    // If borrower is rejected or inactive, update all linked loan applications to Rejected
+    if (status && ['rejected', 'inactive'].includes(String(status).toLowerCase().trim())) {
+      try {
+        let rejStatusId = 3;
+        const rejStatus = await Status.findOne({ where: { name: 'Rejected' }, raw: true });
+        if (rejStatus) rejStatusId = rejStatus.id;
+
+        const borrowerObj = await Borrower.findOne({ where: { user_id: id }, raw: true });
+        const borrowerIdsToUpdate = [id];
+        if (borrowerObj) borrowerIdsToUpdate.push(borrowerObj.id);
+
+        await Loan_Application.update(
+          { status_id: rejStatusId },
+          {
+            where: {
+              borrower_id: { [Op.in]: borrowerIdsToUpdate }
+            }
+          }
+        );
+      } catch (err) {
+        console.error("Cascade borrower rejection error:", err);
+      }
+    }
+
     res.json({ success: true, message: "Borrower updated successfully" });
   } catch (err) {
     console.error("updateBorrower error:", err);
