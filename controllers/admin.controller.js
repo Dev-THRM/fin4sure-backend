@@ -34,6 +34,12 @@ const getBrokersList = async () => {
       }
     }
 
+    let allStatuses = [];
+    try {
+      allStatuses = await Status.findAll({ raw: true });
+    } catch (_) {}
+    const statusMap = new Map(allStatuses.map(s => [s.id, s.name || '']));
+
     return await Promise.all(
       users.map(async (user) => {
         let partner = null;
@@ -50,17 +56,59 @@ const getBrokersList = async () => {
           }
         } catch (_) {}
 
-        let referredApps = [];
-        if (partnerIdVal) {
-          try {
-            referredApps = await Loan_Application.findAll({
-              where: { partner_id: partnerIdVal },
-              raw: true
-            });
-          } catch (_) {}
-        }
+        let partnerIdsToSearch = [user.id];
+        if (partnerIdVal) partnerIdsToSearch.push(partnerIdVal);
 
-        const clientsFromApps = await Promise.all(referredApps.map(async (app) => {
+        let rawReferredApps = [];
+        try {
+          rawReferredApps = await Loan_Application.findAll({
+            where: {
+              [Op.or]: [
+                { partner_id: partnerIdsToSearch },
+                { partner_id: String(user.id) },
+                ...(partnerIdVal ? [{ partner_id: String(partnerIdVal) }] : [])
+              ]
+            },
+            raw: true
+          });
+        } catch (_) {}
+
+        let disbursedCount = 0;
+        let inProgressCount = 0;
+        let pendingCount = 0;
+        let totalVolume = 0;
+
+        const enrichedReferredApps = rawReferredApps.map(app => {
+          const rawSt = statusMap.get(app.status_id) || "Applied";
+          const lowerSt = rawSt.toLowerCase().trim();
+          const normalizedSt = ['disbursed', 'completed'].includes(lowerSt)
+            ? 'disbursed'
+            : lowerSt === 'rejected'
+            ? 'rejected'
+            : lowerSt === 'pending'
+            ? 'pending'
+            : 'in-progress';
+
+          const amt = parseFloat(app.loan_amount) || 0;
+          totalVolume += amt;
+
+          if (normalizedSt === 'disbursed') {
+            disbursedCount++;
+          } else if (['pending', 'rejected'].includes(normalizedSt)) {
+            pendingCount++;
+          } else {
+            inProgressCount++;
+          }
+
+          return {
+            ...app,
+            status: normalizedSt,
+            stage: rawSt,
+            loan_amount: amt
+          };
+        });
+
+        const clientsFromApps = await Promise.all(enrichedReferredApps.map(async (app) => {
           let clientName = null;
           let clientEmail = null;
           let clientPhone = null;
@@ -107,7 +155,6 @@ const getBrokersList = async () => {
         }));
 
         const linkedClients = clientsFromApps.filter(Boolean);
-        const countLeads = partnerIdVal ? await Loan_Application.count({ where: { partner_id: partnerIdVal } }) : 0;
 
         return {
           id: user.id,
@@ -124,8 +171,12 @@ const getBrokersList = async () => {
           pincode: "000000",
           clients: linkedClients,
           clientCount: linkedClients.length,
-          leadCount: countLeads,
-          leads: referredApps,
+          leadCount: enrichedReferredApps.length,
+          disbursed: disbursedCount,
+          inProgress: inProgressCount,
+          pending: pendingCount,
+          volume: totalVolume,
+          leads: enrichedReferredApps,
           createdAt: user.createdAt,
           updatedAt: user.updatedAt,
           statusUpdatedAt: user.updatedAt
