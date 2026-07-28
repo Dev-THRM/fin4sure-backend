@@ -456,6 +456,7 @@ export const allLeads = async (req, res) => {
         u.name       AS client_name,
         u.email      AS client_email,
         u.mob_no     AS client_phone,
+        u.status     AS client_status,
         b.address    AS client_address,
         ""           AS client_state,
         ""           AS client_district,
@@ -495,13 +496,20 @@ export const allLeads = async (req, res) => {
 
       if (!clientName) clientName = `Application #${app.id}`;
 
-      const rawStatus = app.status_name || "Applied";
+      const isBorrowerRejected = ['rejected', 'inactive'].includes(String(app.client_status || '').toLowerCase().trim());
+      const rawStatus = isBorrowerRejected ? "REJECTED" : (app.status_name || "Applied");
       const lowerSt = rawStatus.toLowerCase().trim();
-      const normalizedStatus = ['disbursed', 'completed'].includes(lowerSt)
-        ? 'disbursed'
-        : lowerSt === 'rejected'
-        ? 'rejected'
-        : 'in-progress';
+
+      let normalizedStatus = 'pending';
+      if (isBorrowerRejected || lowerSt === 'rejected') {
+        normalizedStatus = 'rejected';
+      } else if (['disbursed', 'completed'].includes(lowerSt)) {
+        normalizedStatus = 'disbursed';
+      } else if (['applied', 'pending'].includes(lowerSt)) {
+        normalizedStatus = 'pending';
+      } else {
+        normalizedStatus = 'in-progress';
+      }
 
       const formattedAppNo = app.application_no
         ? (String(app.application_no).startsWith('F4S') ? app.application_no : `F4S-${app.application_no}`)
@@ -1638,70 +1646,6 @@ export const updatePlatformSettings = async (req, res) => {
 ----------------------------------------------------- */
 export const getDashboardBundle = async (req, res) => {
   try {
-    let statsData = {};
-    try {
-      const totalClients = await User.count({ where: { role_id: 1 } });
-      const totalBrokers = await User.count({ where: { role_id: 2 } });
-      const approvedBrokers = await User.count({ where: { role_id: 2, status: "active" } });
-      const pendingBrokers = await User.count({ where: { role_id: 2, status: "pending verification" } });
-      const totalLenders = await Lender.count();
-      const totalApplications = await Loan_Application.count();
-
-      let inProgressCount = 0;
-      let completedCount = 0;
-      let rejectedCount = 0;
-      let pendingCount = 0;
-      let loanVolume = 0;
-      let disbursedAmount = 0;
-
-      try {
-        const allApps = await Loan_Application.findAll({ raw: true });
-        loanVolume = allApps.reduce((acc, curr) => acc + (parseFloat(curr.loan_amount) || 0), 0);
-
-        const allStatuses = await Status.findAll({ raw: true });
-        const statusMap = new Map(allStatuses.map(s => [s.id, s.name ? s.name.toLowerCase() : '']));
-
-        for (const app of allApps) {
-          const stName = statusMap.get(app.status_id) || 'applied';
-          if (['disbursed', 'completed'].includes(stName)) {
-            completedCount++;
-            disbursedAmount += (parseFloat(app.loan_amount) || 0);
-          } else if (stName === 'rejected') {
-            rejectedCount++;
-          } else if (['applied', 'pending'].includes(stName)) {
-            pendingCount++;
-          } else {
-            inProgressCount++;
-          }
-        }
-      } catch (_) {}
-
-      const topLenders = await getTopLendersHelper();
-
-      statsData = {
-        totalUsers: totalClients + totalBrokers,
-        totalClients,
-        totalBrokers,
-        approvedBrokers,
-        pendingBrokers,
-        totalLenders,
-        totalApplications,
-        inProgressCount,
-        completedCount,
-        rejectedCount,
-        pendingCount,
-        loanVolume,
-        disbursedAmount,
-        activeBorrowers: totalClients,
-        activePartners: approvedBrokers,
-        borrowers: totalClients,
-        leads: totalApplications,
-        brokers: totalBrokers,
-        rating: "5.0",
-        topLenders
-      };
-    } catch (_) {}
-
     let leadsData = [];
     try {
       const applications = await Loan_Application.findAll({
@@ -1716,6 +1660,7 @@ export const getDashboardBundle = async (req, res) => {
         let clientState = "-";
         let clientDistrict = "-";
         let clientDob = "-";
+        let isBorrowerRejected = false;
 
         if (app.borrower_id) {
           try {
@@ -1731,6 +1676,9 @@ export const getDashboardBundle = async (req, res) => {
                   clientName = uObj.name;
                   clientEmail = uObj.email || "-";
                   clientPhone = uObj.mob_no || "-";
+                  if (['rejected', 'inactive'].includes(String(uObj.status || '').toLowerCase().trim())) {
+                    isBorrowerRejected = true;
+                  }
                 }
               }
             }
@@ -1738,7 +1686,7 @@ export const getDashboardBundle = async (req, res) => {
         }
 
         if (!clientName && app.loan_purpose) {
-          const parts = app.loan_purpose.split(/ \u2014 | \u2013 | - /);
+          const parts = app.loan_purpose.split(/ — | – | - /);
           if (parts[1]) {
             const subParts = parts[1].split(' (');
             clientName = subParts[0] ? subParts[0].trim() : null;
@@ -1758,19 +1706,27 @@ export const getDashboardBundle = async (req, res) => {
           } catch (_) {}
         }
 
-        let statusName = "in-progress";
-        let stageName = "Applied";
-        if (app.status_id) {
+        let statusName = "pending";
+        let stageName = isBorrowerRejected ? "REJECTED" : "Applied";
+
+        if (isBorrowerRejected) {
+          statusName = "rejected";
+          stageName = "REJECTED";
+        } else if (app.status_id) {
           try {
             const sObj = await Status.findByPk(app.status_id, { raw: true });
             if (sObj) {
               const lowerSt = sObj.name.toLowerCase().trim();
               stageName = sObj.name;
-              statusName = ['disbursed', 'completed'].includes(lowerSt)
-                ? 'disbursed'
-                : lowerSt === 'rejected'
-                ? 'rejected'
-                : 'in-progress';
+              if (['disbursed', 'completed'].includes(lowerSt)) {
+                statusName = 'disbursed';
+              } else if (lowerSt === 'rejected') {
+                statusName = 'rejected';
+              } else if (['applied', 'pending'].includes(lowerSt)) {
+                statusName = 'pending';
+              } else {
+                statusName = 'in-progress';
+              }
             }
           } catch (_) {}
         }
@@ -1823,6 +1779,49 @@ export const getDashboardBundle = async (req, res) => {
           updatedAt: app.updatedAt
         };
       }));
+    } catch (_) {}
+
+    let statsData = {};
+    try {
+      const totalClients = await User.count({ where: { role_id: 1 } });
+      const totalBrokers = await User.count({ where: { role_id: 2 } });
+      const approvedBrokers = await User.count({ where: { role_id: 2, status: "active" } });
+      const pendingBrokers = await User.count({ where: { role_id: 2, status: "pending verification" } });
+      const totalLenders = await Lender.count();
+      const totalApplications = leadsData.length;
+
+      const completedCount = leadsData.filter(l => l.status === 'disbursed').length;
+      const inProgressCount = leadsData.filter(l => l.status === 'in-progress').length;
+      const pendingCount = leadsData.filter(l => l.status === 'pending').length;
+      const rejectedCount = leadsData.filter(l => l.status === 'rejected').length;
+      const loanVolume = leadsData.reduce((acc, curr) => acc + (parseFloat(curr.loan_amount) || 0), 0);
+      const disbursedAmount = leadsData.filter(l => l.status === 'disbursed').reduce((acc, curr) => acc + (parseFloat(curr.loan_amount) || 0), 0);
+
+      const topLenders = await getTopLendersHelper();
+
+      statsData = {
+        totalUsers: totalClients + totalBrokers,
+        totalClients,
+        totalBrokers,
+        approvedBrokers,
+        pendingBrokers,
+        totalLenders,
+        totalApplications,
+        inProgressCount,
+        disbursedCount: completedCount,
+        completedCount,
+        rejectedCount,
+        pendingCount,
+        loanVolume,
+        disbursedAmount,
+        activeBorrowers: totalClients,
+        activePartners: approvedBrokers,
+        borrowers: totalClients,
+        leads: totalApplications,
+        brokers: totalBrokers,
+        rating: "5.0",
+        topLenders
+      };
     } catch (_) {}
 
     let brokersData = [];
