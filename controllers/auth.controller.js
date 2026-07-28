@@ -416,8 +416,7 @@ export const profileUpdateHandeler = async (req, res) => {
         updatedAddress = client.address;
         updatedPincode = req.body.pincode || updatedPincode;
       }
-    }
-    } else if (updatedUser.role_id === 2) {
+    } else if (updatedUser && updatedUser.role_id === 2) {
       if (req.body.city) {
         const cityName = req.body.city.trim();
         let cityObj = await City.findOne({ where: { name: cityName } });
