@@ -3,6 +3,7 @@ import { sequelize } from "../config/db.js";
 import { DataTypes, Op } from "sequelize";
 import { generateOTP } from "../utils/otp.js";
 import { signAccessToken } from "../utils/jwt.utlis.js";
+import { sendOtpEmail } from "../utils/email.js";
 
 import User from "../models/user.js";
 import OtpVerificationInit from "../models/otp_verification.js";
@@ -234,63 +235,31 @@ export const registerBorrowerService = async (data) => {
   }
 };
 
-export const sendOTPService = async (number) => {
+export const sendOTPService = async (email) => {
+  if (!email) throw new Error("Email is required");
+
   const otp = generateOTP();
 
   await OtpVerification.create({
-    mob_no: number,
+    email,
     otp_hash: otp,
     purpose: 'login_or_signup',
     expires_at: new Date(Date.now() + OTP_EXPIRY_TIME),
   });
 
-  // const whatsapp_url = `https://graph.facebook.com/v20.0/${process.env.MOBILE_ID}/messages`;
-  // 
-  // await axios.post(
-  //   whatsapp_url,
-  //   {
-  //     messaging_product: "whatsapp",
-  //     to: `91${number}`,
-  //     type: "template",
-  //     template: {
-  //       name: "delivery",
-  //       language: { code: "en" },
-  //       components: [
-  //         {
-  //           type: "body",
-  //           parameters: [{ type: "text", text: otp }],
-  //         },
-  //         {
-  //           type: "button",
-  //           sub_type: "url",
-  //           index: 0,
-  //           parameters: [{ type: "text", text: "otp" }],
-  //         },
-  //       ],
-  //     },
-  //   },
-  //   {
-  //     headers: {
-  //       Authorization: `Bearer ${process.env.TOKENS}`,
-  //       "Content-Type": "application/json",
-  //     },
-  //   }
-  // );
-
-  // console.log(res.data);
-  // LOCAL TESTING ONLY: Log the OTP to the console
-  // console.log(`\n==========================================`);
-  // console.log(`🔑 LOCAL TESTING OTP FOR ${number}: ${otp} 🔑`);
-  // console.log(`==========================================\n`);
+  // Send OTP via Resend
+  await sendOtpEmail(email, otp);
 
   return { success: true };
 };
 
-export const verifyOTPService = async (number, otp) => {
+export const verifyOTPService = async (email, otp) => {
+  if (!email) throw new Error("Email is required");
+
   // Allow bypass with '123456' or '1234' for local testing
   if (otp === '123456' || otp === '1234') {
     const record = await OtpVerification.findOne({
-      where: { mob_no: number },
+      where: { email },
       order: [['createdAt', 'DESC']]
     });
     if (record) {
@@ -300,7 +269,7 @@ export const verifyOTPService = async (number, otp) => {
   }
 
   const record = await OtpVerification.findOne({
-    where: { mob_no: number },
+    where: { email },
     order: [['createdAt', 'DESC']]
   });
 
