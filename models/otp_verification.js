@@ -8,6 +8,7 @@ export default (sequelize, DataTypes) => {
   }
   Otp_Verification.init({
     mob_no: DataTypes.STRING,
+    email: DataTypes.STRING,
     otp_hash: DataTypes.STRING,
     purpose: DataTypes.STRING,
     expires_at: DataTypes.DATE,

@@ -117,11 +117,15 @@ selectedLenders, broker_id } = req.body;
 
 export const SendOTP = async (req, res) => {
   try {
-    const { number } = req.body;
-    if (!/^[0-9]{10}$/.test(number)) {
-      return res.status(400).json({ message: "Invalid number passed" });
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
     }
-    await sendOTPService(number);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Invalid email address" });
+    }
+    await sendOTPService(email.toLowerCase().trim());
     res.json({ success: true });
   } catch (error) {
     console.error("Error sending OTP:", error);
@@ -131,11 +135,11 @@ export const SendOTP = async (req, res) => {
 
 export const verifyOTP = async (req, res) => {
   try {
-    const { number, otp } = req.body;
-    if (!number || !otp) {
-      return res.status(400).json({ message: "Number and OTP required" });
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ message: "Email and OTP required" });
     }
-    await verifyOTPService(number, otp);
+    await verifyOTPService(email.toLowerCase().trim(), otp);
     return res.json({ message: "OTP verified successfully" });
   } catch (error) {
     return res.status(400).json({ message: error.message });
