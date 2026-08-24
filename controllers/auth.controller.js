@@ -368,22 +368,7 @@ export const profileHandler = async (req, res) => {
     if (role === "borrower" && user) {
       try {
         let client = await Borrower.findOne({ where: { user_id: user.id }, raw: true });
-        if (!client) {
-          try {
-            const [newClient] = await Borrower.findOrCreate({
-              where: { user_id: user.id },
-              defaults: {
-                user_id: user.id,
-                dob: new Date('1995-05-15'),
-                gender: 'male',
-                address: '123 Green Avenue, Central Delhi',
-                pincode_id: 1
-              }
-            });
-            client = newClient ? (newClient.toJSON ? newClient.toJSON() : newClient) : null;
-          } catch (_) {}
-        }
-
+        
         let pincodeCode = "";
         let cityName = "";
         let districtName = "";
@@ -416,18 +401,18 @@ export const profileHandler = async (req, res) => {
           }
         }
 
-        const addrVal = (client && client.address && client.address.trim()) ? client.address : "123 Green Avenue, Central Delhi";
-        const pinVal = pincodeCode || (client && client.pincode ? String(client.pincode) : "110001");
-
         clientDetails = {
-          dob: (client && client.dob) || "1995-05-15",
-          address: addrVal,
-          pincode: pinVal,
-          state: stateName || "Delhi",
-          district: districtName || "Central",
-          city: cityName || "New Delhi"
+          dob: (client && client.dob) || null,
+          address: (client && client.address) || "",
+          pincode: pincodeCode || (client && client.pincode ? String(client.pincode) : ""),
+          state: stateName || "",
+          district: districtName || "",
+          city: cityName || ""
         };
       } catch (bErr) {
+        console.error("Borrower profile fetch error:", bErr.message);
+      }
+    }
         console.error("Borrower profile fetch error:", bErr.message);
       }
     }

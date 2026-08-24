@@ -154,10 +154,10 @@ export const registerBorrowerService = async (data) => {
       }
       targetBorrower = await Borrower.create({
         user_id: targetUser.id,
-        dob: dob ? new Date(dob) : new Date("1995-01-01"),
-        gender: gender || "male",
-        address: address || "Main Street",
-        pincode_id: pincodeRecord ? pincodeRecord.id : 1,
+        dob: dob ? new Date(dob) : null,
+        gender: gender || null,
+        address: address || "",
+        pincode_id: pincodeRecord ? pincodeRecord.id : null,
         profile_status: 'Active'
       }, { transaction });
     }
