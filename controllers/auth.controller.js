@@ -18,6 +18,7 @@ import State from "../models/state.js";
 import Admin from "../models/admin.model.js";
 import Borrower from "../models/borrower.js";
 import Pincode from "../models/pincode.js";
+import User from "../models/user.js";
 
 export const signUpHandler = async (req, res) => {
   try {
