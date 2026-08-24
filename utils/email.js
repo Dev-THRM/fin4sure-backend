@@ -1,16 +1,27 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Gmail SMTP transporter
+// Uses App Password (2FA required on the Gmail/Workspace account)
+// Switch to Resend (resend.com) once a domain is verified
+const transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,          // SSL
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD,
+  },
+});
 
 /**
- * Send an OTP email via Resend (sandbox sender for now).
+ * Send an OTP email via Gmail SMTP.
  * @param {string} toEmail  - Recipient email address
- * @param {string} otp      - 6-digit OTP string
+ * @param {string} otp      - 4-digit OTP string
  */
 export const sendOtpEmail = async (toEmail, otp) => {
-  const { data, error } = await resend.emails.send({
-    from: 'Fin4Sure <onboarding@resend.dev>',   // Sandbox sender — swap for verified domain later
-    to: [toEmail],
+  const mailOptions = {
+    from: `"Fin4Sure" <${process.env.GMAIL_USER}>`,
+    to: toEmail,
     subject: `${otp} is your Fin4Sure login OTP`,
     html: `
       <!DOCTYPE html>
@@ -60,13 +71,14 @@ export const sendOtpEmail = async (toEmail, otp) => {
         </body>
       </html>
     `,
-  });
+  };
 
-  if (error) {
-    console.error('Resend email error:', error);
-    throw new Error(`Failed to send OTP email: ${error.message}`);
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ OTP email sent to ${toEmail} | Message ID: ${info.messageId}`);
+    return info;
+  } catch (err) {
+    console.error('❌ Gmail SMTP error:', err.message);
+    throw new Error(`Failed to send OTP email: ${err.message}`);
   }
-
-  console.log(`✅ OTP email sent to ${toEmail} | Message ID: ${data?.id}`);
-  return data;
 };
