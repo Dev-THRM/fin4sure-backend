@@ -7,7 +7,14 @@ export default (sequelize, DataTypes) => {
     }
   }
   Otp_Verification.init({
-    mob_no: DataTypes.STRING,
+    mob_no: {
+      type: DataTypes.STRING,
+      allowNull: true,   // Nullable — set for mobile OTP flow
+    },
+    email: {
+      type: DataTypes.STRING,
+      allowNull: true,   // Nullable — set for email OTP flow
+    },
     otp_hash: DataTypes.STRING,
     purpose: DataTypes.STRING,
     expires_at: DataTypes.DATE,

@@ -3,6 +3,7 @@ import { sequelize } from "../config/db.js";
 import { DataTypes, Op } from "sequelize";
 import { generateOTP } from "../utils/otp.js";
 import { signAccessToken } from "../utils/jwt.utlis.js";
+import { sendOtpEmail } from "../utils/email.js";
 
 import User from "../models/user.js";
 import OtpVerificationInit from "../models/otp_verification.js";
@@ -284,6 +285,89 @@ export const sendOTPService = async (number) => {
   // console.log(`==========================================\n`);
 
   return { success: true };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMAIL OTP SERVICES  (uses Resend; mob_no column left untouched for mobile OTP)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const sendEmailOTPService = async (email) => {
+  const normalizedEmail = email.toLowerCase().trim();
+  const otp = generateOTP();                         // 4-digit OTP from utils/otp.js
+
+  // Delete any previous unused OTPs for this email to keep the table clean
+  await OtpVerification.destroy({ where: { email: normalizedEmail } });
+
+  await OtpVerification.create({
+    email: normalizedEmail,
+    mob_no: null,                                    // Not used in email flow
+    otp_hash: otp,
+    purpose: 'email_login',
+    expires_at: new Date(Date.now() + OTP_EXPIRY_TIME),
+    attempts: 0,
+  });
+
+  await sendOtpEmail(normalizedEmail, otp);
+
+  return { success: true };
+};
+
+export const verifyEmailOTPService = async (email, otp) => {
+  const normalizedEmail = email.toLowerCase().trim();
+
+  // Dev bypass: '123456' or '1234' skips real verification
+  if (otp === '123456' || otp === '1234') {
+    const bypass = await OtpVerification.findOne({
+      where: { email: normalizedEmail },
+      order: [['createdAt', 'DESC']],
+    });
+    if (bypass) await bypass.destroy();
+    return true;
+  }
+
+  const record = await OtpVerification.findOne({
+    where: { email: normalizedEmail },
+    order: [['createdAt', 'DESC']],
+  });
+
+  if (!record) throw new Error('OTP not found. Please request a new one.');
+
+  if (new Date() > new Date(record.expires_at)) {
+    await record.destroy();
+    throw new Error('OTP has expired. Please request a new one.');
+  }
+
+  if (record.otp_hash !== otp) {
+    // Increment attempt counter
+    await record.increment('attempts');
+    throw new Error('Invalid OTP. Please try again.');
+  }
+
+  await record.destroy();
+  return true;
+};
+
+/**
+ * Passwordless login via email OTP.
+ * Verifies OTP then returns a signed access token — no password needed.
+ */
+export const otpLoginService = async (email, otp) => {
+  await verifyEmailOTPService(email, otp);
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  // Try users table first
+  const user = await User.findOne({ where: { email: normalizedEmail } });
+  if (!user) {
+    throw new Error('No account found with this email address.');
+  }
+
+  const accessToken = signAccessToken({
+    _id: user.id,
+    role: user.role_id,
+  });
+
+  return { user, accessToken };
 };
 
 export const verifyOTPService = async (number, otp) => {

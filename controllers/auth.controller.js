@@ -5,7 +5,10 @@ import {
   loginService,
   profileService,
   profileUpdateService,
-  registerBorrowerService
+  registerBorrowerService,
+  sendEmailOTPService,
+  verifyEmailOTPService,
+  otpLoginService,
 } from "../services/auth.service.js";
 import { signAccessToken } from "../utils/jwt.utlis.js";
 import Partner from "../models/partner.model.js";
@@ -123,6 +126,90 @@ export const SendOTP = async (req, res) => {
     res.status(500).json({ error: "Failed to send OTP" });
   }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMAIL OTP HANDLERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/auth/send-email-otp
+ * Body: { email }
+ * Generates a 4-digit OTP and sends it to the provided email via Resend.
+ */
+export const SendEmailOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: 'A valid email address is required.' });
+    }
+    await sendEmailOTPService(email);
+    return res.json({ success: true, message: 'OTP sent to your email address.' });
+  } catch (error) {
+    console.error('Error sending email OTP:', error);
+    return res.status(500).json({ message: error.message || 'Failed to send OTP email.' });
+  }
+};
+
+/**
+ * POST /api/auth/verify-email-otp
+ * Body: { email, otp }
+ * Verifies the email OTP (without logging in — use for standalone verification steps).
+ */
+export const VerifyEmailOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ message: 'Email and OTP are required.' });
+    }
+    await verifyEmailOTPService(email, otp);
+    return res.json({ success: true, message: 'OTP verified successfully.' });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+};
+
+/**
+ * POST /api/auth/otp-login
+ * Body: { email, otp }
+ * Passwordless login — verifies OTP and returns a signed JWT + sets cookie.
+ */
+export const OTPLoginHandler = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ message: 'Email and OTP are required.' });
+    }
+
+    const { user, accessToken } = await otpLoginService(email, otp);
+
+    let role = 'borrower';
+    if (user.role_id === 2) role = 'partner';
+    if (user.role_id === 3) role = 'admin';
+
+    return res
+      .cookie('AccessToken', accessToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        maxAge: 24 * 60 * 60 * 1000,
+      })
+      .json({
+        success: true,
+        accessToken,
+        user: {
+          _id: user.id,
+          name: user.name,
+          email: user.email,
+          role,
+        },
+      });
+  } catch (error) {
+    console.error('OTP Login error:', error);
+    const status = error.message.includes('No account') ? 404 : 400;
+    return res.status(status).json({ message: error.message });
+  }
+};
+
 
 export const verifyOTP = async (req, res) => {
   try {

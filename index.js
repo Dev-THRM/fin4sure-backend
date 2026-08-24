@@ -158,6 +158,17 @@ const startServer = async () => {
       console.log("Database schema alter notice:", err.message);
     }
 
+    // Add email column to otp_verifications for email OTP support (backward compatible)
+    try {
+      await sequelize.query("ALTER TABLE otp_verifications ADD COLUMN email VARCHAR(255) NULL DEFAULT NULL;");
+      console.log("otp_verifications.email column added.");
+    } catch (err) {
+      // Silently ignore if the column already exists (error code 1060)
+      if (!err.message.includes('Duplicate column')) {
+        console.log("otp_verifications alter notice:", err.message);
+      }
+    }
+
     console.log("Database connected successfully");
     startScraperScheduler();
   } catch (error) {
