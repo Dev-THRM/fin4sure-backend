@@ -369,6 +369,8 @@ export const profileHandler = async (req, res) => {
       try {
         let client = await Borrower.findOne({ where: { user_id: user.id }, raw: true });
         
+        console.log("[PROFILE DEBUG] user_id:", user.id, "| client raw:", JSON.stringify(client));
+
         let pincodeCode = "";
         let cityName = "";
         let districtName = "";
@@ -376,7 +378,12 @@ export const profileHandler = async (req, res) => {
 
         if (client && client.pincode_id) {
           try {
-            const pinRec = await Pincode.findByPk(client.pincode_id, { raw: true });
+            let pinRec = await Pincode.findByPk(client.pincode_id, { raw: true });
+            // If FK lookup fails, try treating pincode_id as the actual code string
+            if (!pinRec) {
+              pinRec = await Pincode.findOne({ where: { code: String(client.pincode_id) }, raw: true });
+            }
+            console.log("[PROFILE DEBUG] pinRec:", JSON.stringify(pinRec));
             if (pinRec) {
               pincodeCode = pinRec.code || "";
               if (pinRec.city_id) {
@@ -401,14 +408,18 @@ export const profileHandler = async (req, res) => {
           }
         }
 
+        console.log("[PROFILE DEBUG] user_id:", user.id, "| client raw:", JSON.stringify(client));
+        console.log("[PROFILE DEBUG] pincodeCode:", pincodeCode, "| stateName:", stateName, "| cityName:", cityName, "| districtName:", districtName);
         clientDetails = {
           dob: (client && client.dob) || null,
           address: (client && client.address) || "",
-          pincode: pincodeCode || (client && client.pincode ? String(client.pincode) : ""),
+          // Fallback: if FK resolution failed, try raw pincode column or pincode_id itself
+          pincode: pincodeCode || (client && client.pincode ? String(client.pincode) : (client && client.pincode_id ? String(client.pincode_id) : "")),
           state: stateName || "",
           district: districtName || "",
           city: cityName || ""
         };
+        console.log("[PROFILE DEBUG] final clientDetails:", JSON.stringify(clientDetails));
       } catch (bErr) {
         console.error("Borrower profile fetch error:", bErr.message);
       }

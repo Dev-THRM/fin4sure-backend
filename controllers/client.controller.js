@@ -9,11 +9,9 @@ import User from "../models/user.js";
 import Borrower from "../models/borrower.js";
 
 
-// ----------------- GETS THE PRODUCT CLINET APPLIED FOR -----------------
 export const getClientProducts = async (req, res) => {
   try {
     const id = req.user.id || req.user._id;
-    // Product array was old logic on Client model. New logic uses Loan_Application
     return res.json([]);
 
   } catch (err) {
@@ -185,4 +183,4 @@ export const uploadDocs = async (req, res) => {
     return res.status(500).json({ message: "Server error during document upload" });
   }
 };
-
+
