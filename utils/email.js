@@ -3,15 +3,22 @@ import nodemailer from 'nodemailer';
 // Gmail SMTP transporter
 // Uses App Password (2FA required on the Gmail/Workspace account)
 // Switch to Resend (resend.com) once a domain is verified
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,          // SSL
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-});
+let transporter = null;
+
+const getTransporter = () => {
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,          // SSL
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
+      },
+    });
+  }
+  return transporter;
+};
 
 /**
  * Send an OTP email via Gmail SMTP.
@@ -20,9 +27,9 @@ const transporter = nodemailer.createTransport({
  */
 export const sendOtpEmail = async (toEmail, otp) => {
   const mailOptions = {
-    from: `"Fin4Sure" <${process.env.GMAIL_USER}>`,
+    from: `"Finn4Sure" <${process.env.GMAIL_USER}>`,
     to: toEmail,
-    subject: `${otp} is your Fin4Sure login OTP`,
+    subject: `${otp} is your Finn4Sure login OTP`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -38,7 +45,7 @@ export const sendOtpEmail = async (toEmail, otp) => {
                   <!-- Header -->
                   <tr>
                     <td style="background:linear-gradient(135deg,#0f3460 0%,#16a085 100%);padding:32px 40px;text-align:center;">
-                      <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:-0.5px;">Fin4Sure</h1>
+                      <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:-0.5px;">Finn4Sure</h1>
                       <p style="margin:6px 0 0;color:rgba(255,255,255,0.8);font-size:13px;">Secure Financial Services</p>
                     </td>
                   </tr>
@@ -47,7 +54,7 @@ export const sendOtpEmail = async (toEmail, otp) => {
                     <td style="padding:40px 40px 32px;">
                       <p style="margin:0 0 8px;color:#0f3460;font-size:18px;font-weight:600;">Your One-Time Password</p>
                       <p style="margin:0 0 28px;color:#64748b;font-size:14px;line-height:1.6;">
-                        Use the code below to sign in to your Fin4Sure account. This OTP is valid for <strong>5 minutes</strong> and can only be used once.
+                        Use the code below to sign in to your Finn4Sure account. This OTP is valid for <strong>5 minutes</strong> and can only be used once.
                       </p>
                       <!-- OTP Box -->
                       <div style="background:#f0fdf4;border:2px dashed #16a085;border-radius:12px;padding:24px;text-align:center;margin-bottom:28px;">
@@ -61,7 +68,7 @@ export const sendOtpEmail = async (toEmail, otp) => {
                   <!-- Footer -->
                   <tr>
                     <td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0;text-align:center;">
-                      <p style="margin:0;color:#94a3b8;font-size:11px;">© ${new Date().getFullYear()} Fin4Sure. All rights reserved.</p>
+                      <p style="margin:0;color:#94a3b8;font-size:11px;">© ${new Date().getFullYear()} Finn4Sure. All rights reserved.</p>
                     </td>
                   </tr>
                 </table>
@@ -74,7 +81,8 @@ export const sendOtpEmail = async (toEmail, otp) => {
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
+    const transport = getTransporter();
+    const info = await transport.sendMail(mailOptions);
     console.log(`✅ OTP email sent to ${toEmail} | Message ID: ${info.messageId}`);
     return info;
   } catch (err) {
