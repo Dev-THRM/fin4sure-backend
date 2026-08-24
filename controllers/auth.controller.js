@@ -138,11 +138,11 @@ export const SendOTP = async (req, res) => {
  */
 export const SendEmailOTP = async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, purpose } = req.body;
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ message: 'A valid email address is required.' });
     }
-    await sendEmailOTPService(email);
+    await sendEmailOTPService(email, purpose);
     return res.json({ success: true, message: 'OTP sent to your email address.' });
   } catch (error) {
     console.error('Error sending email OTP:', error);

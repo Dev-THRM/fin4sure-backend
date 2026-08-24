@@ -291,8 +291,17 @@ export const sendOTPService = async (number) => {
 // EMAIL OTP SERVICES  (uses Resend; mob_no column left untouched for mobile OTP)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const sendEmailOTPService = async (email) => {
+export const sendEmailOTPService = async (email, purposeStr = 'email_login') => {
   const normalizedEmail = email.toLowerCase().trim();
+
+  // If this is for login, make sure the user actually exists
+  if (purposeStr === 'login') {
+    const user = await User.findOne({ where: { email: normalizedEmail } });
+    if (!user) {
+      throw new Error('No account found with this email address.');
+    }
+  }
+
   const otp = generateOTP();                         // 4-digit OTP from utils/otp.js
 
   // Delete any previous unused OTPs for this email to keep the table clean
