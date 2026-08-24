@@ -413,9 +413,6 @@ export const profileHandler = async (req, res) => {
         console.error("Borrower profile fetch error:", bErr.message);
       }
     }
-        console.error("Borrower profile fetch error:", bErr.message);
-      }
-    }
 
     return res.status(200).json({
       _id: user.id,
@@ -425,11 +422,11 @@ export const profileHandler = async (req, res) => {
       role,
       ...clientDetails
     });
-  } catch (err) {
+  }  catch (err) {
     console.error("Profile handler error:", err);
     return res.status(500).json({ message: "Failed to load profile details." });
   }
-};
+};  
 
 export const profileUpdateHandeler = async (req, res) => {
   try {
