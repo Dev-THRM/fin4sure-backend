@@ -433,24 +433,16 @@ export const profileHandler = async (req, res) => {
     }
 
     return res.status(200).json({
-      _id: user ? user.id : 1,
-      name: user ? user.name : "Sahil",
-      email: user ? user.email : "bijlanisahil@gmail.com",
-      number: user ? (user.mob_no || user.number) : "8123123712",
+      _id: user.id,
+      name: user.name,
+      email: user.email,
+      number: user.mob_no || user.number,
       role,
       ...clientDetails
     });
   } catch (err) {
-    console.error("Profile handler fallback error:", err);
-    return res.status(200).json({
-      _id: req.user?._id || 1,
-      name: req.user?.role === 3 ? "Admin" : "Sahil",
-      email: req.user?.role === 3 ? "admin@finn4sure.com" : "bijlanisahil@gmail.com",
-      number: req.user?.role === 3 ? "9910507574" : "8123123712",
-      address: "123 Green Avenue, Central Delhi",
-      pincode: "110001",
-      role: req.user?.role === 3 ? "admin" : "borrower"
-    });
+    console.error("Profile handler error:", err);
+    return res.status(500).json({ message: "Failed to load profile details." });
   }
 };
 
