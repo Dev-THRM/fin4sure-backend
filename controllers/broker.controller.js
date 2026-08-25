@@ -293,7 +293,7 @@ export const referClient = async (req, res) => {
       loan_purpose: purposeText,
       tenure: tenure ? parseInt(tenure) : null,
       client_preference: clientPref,
-      status_id: 1, // pending
+      status_id: 2, // Applied complete -> Current stage is Docs (ID: 2)
     });
 
     let waCredentials = null;

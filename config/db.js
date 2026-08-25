@@ -27,6 +27,13 @@ const connectDB = async () => {
     } catch (err) {
       // Column already exists or other error, safe to ignore
     }
+
+    try {
+      await sequelize.query("UPDATE loan_applications SET status_id = 2 WHERE status_id = 1;");
+      console.log("Migration: Updated initial applied loans to status_id = 2 (Docs)");
+    } catch (err) {
+      // Safe to ignore
+    }
   } catch (error) {
     console.error(`MySQL connection error: ${error.message}`);
   }
