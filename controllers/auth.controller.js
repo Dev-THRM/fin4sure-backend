@@ -426,13 +426,34 @@ export const profileHandler = async (req, res) => {
       }
     }
 
+    let partnerDetails = {};
+    if (role === "partner" && user) {
+      try {
+        let partner = await Partner.findOne({ where: { user_id: user.id }, raw: true });
+        let cityName = "";
+        if (partner && partner.city_id) {
+          const cRec = await City.findByPk(partner.city_id, { raw: true });
+          if (cRec) cityName = cRec.name || "";
+        }
+        partnerDetails = {
+          brokerId: partner ? partner.id : user.id,
+          partner_id: partner ? partner.id : user.id,
+          city: cityName || user.address || user.city || "",
+        };
+      } catch (pErr) {
+        console.error("Partner profile fetch error:", pErr.message);
+      }
+    }
+
     return res.status(200).json({
       _id: user.id,
+      id: user.id,
       name: user.name,
       email: user.email,
       number: user.mob_no || user.number,
       role,
-      ...clientDetails
+      ...clientDetails,
+      ...partnerDetails
     });
   }  catch (err) {
     console.error("Profile handler error:", err);
