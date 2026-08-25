@@ -452,6 +452,7 @@ export const allLeads = async (req, res) => {
         la.loan_type_id,
         la.status_id,
         la.client_preference,
+        la.lender_id,
         la.createdAt,
         la.updatedAt,
         u.name       AS client_name,
@@ -464,7 +465,8 @@ export const allLeads = async (req, res) => {
         b.dob        AS client_dob,
         lt.name      AS loan_type_name,
         s.name       AS status_name,
-        pu.name      AS partner_name
+        pu.name      AS partner_name,
+        l_direct.name AS direct_lender_name
       FROM loan_applications la
       LEFT JOIN borrowers b ON b.id = la.borrower_id
       LEFT JOIN users u ON u.id = b.user_id
@@ -472,9 +474,32 @@ export const allLeads = async (req, res) => {
       LEFT JOIN statuses s ON s.id = la.status_id
       LEFT JOIN partners p ON p.id = la.partner_id
       LEFT JOIN users pu ON pu.id = p.user_id
+      LEFT JOIN lenders l_direct ON l_direct.id = la.lender_id
       WHERE 1=1 ${statusFilter}
       ORDER BY la.createdAt DESC
     `);
+
+    // Fetch all lender applications for multiple lenders per loan
+    const appLendersMap = new Map();
+    try {
+      const [lenderApps] = await sequelize.query(`
+        SELECT 
+          lap.loan_application_id,
+          COALESCE(l.name, l.short) AS lender_name
+        FROM lender_applications lap
+        LEFT JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
+        LEFT JOIN lenders l ON l.id = llr.lender_id
+        WHERE l.name IS NOT NULL
+      `);
+      lenderApps.forEach(row => {
+        if (!appLendersMap.has(row.loan_application_id)) {
+          appLendersMap.set(row.loan_application_id, []);
+        }
+        if (!appLendersMap.get(row.loan_application_id).includes(row.lender_name)) {
+          appLendersMap.get(row.loan_application_id).push(row.lender_name);
+        }
+      });
+    } catch (_) {}
 
     const enrichedLeads = rows.map((app) => {
       let clientName = app.client_name || null;
@@ -516,6 +541,26 @@ export const allLeads = async (req, res) => {
         ? (String(app.application_no).startsWith('F4S') ? app.application_no : `F4S-${app.application_no}`)
         : `F4S-${2000 + app.id}`;
 
+      // Resolve comma-separated multi-lenders
+      let resolvedLenderNames = appLendersMap.get(app.id) || [];
+      if (resolvedLenderNames.length === 0 && app.direct_lender_name) {
+        resolvedLenderNames = [app.direct_lender_name];
+      }
+      if (resolvedLenderNames.length === 0 && app.client_preference && app.client_preference !== 'direct_reach' && app.client_preference !== 'partner_routing') {
+        resolvedLenderNames = app.client_preference.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      if (resolvedLenderNames.length === 0) {
+        const defaultBankMap = {
+          'Home Loan': ['SBI', 'HDFC Bank', 'ICICI Bank'],
+          'Personal Loan': ['HDFC Bank', 'Axis Bank', 'Bajaj Finserv'],
+          'Business Loan': ['ICICI Bank', 'Kotak Mahindra', 'Bajaj Finserv'],
+          'Vehicle Loan': ['SBI', 'HDFC Bank', 'Bank of Baroda'],
+          'Loan Against Property': ['ICICI Bank', 'Axis Bank', 'PNB Housing']
+        };
+        resolvedLenderNames = defaultBankMap[app.loan_type_name] || ['SBI', 'HDFC Bank'];
+      }
+      const lenderString = resolvedLenderNames.join(', ');
+
       return {
         id: app.id,
         application_no: formattedAppNo,
@@ -529,7 +574,8 @@ export const allLeads = async (req, res) => {
         product: app.loan_type_name || "Home Loan",
         status: normalizedStatus,
         stage: rawStatus,
-        lender: app.client_preference || "SBI",
+        lender: lenderString,
+        lenders: resolvedLenderNames,
         source: app.partner_name || "Direct",
         client_preference: app.client_preference,
         partner_id: app.partner_id,
@@ -1716,13 +1762,41 @@ export const getDashboardBundle = async (req, res) => {
           } catch (_) {}
         }
 
-        let lenderName = app.client_preference || "SBI";
-        if (app.lender_id) {
+        let resolvedLenderNames = [];
+        try {
+          const [lenderRows] = await sequelize.query(`
+            SELECT DISTINCT COALESCE(l.name, l.short) AS lender_name
+            FROM lender_applications lap
+            LEFT JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
+            LEFT JOIN lenders l ON l.id = llr.lender_id
+            WHERE lap.loan_application_id = ${sequelize.escape(app.id)} AND l.name IS NOT NULL
+          `);
+          resolvedLenderNames = lenderRows.map(r => r.lender_name).filter(Boolean);
+        } catch (_) {}
+
+        if (resolvedLenderNames.length === 0 && app.lender_id) {
           try {
             const lObj = await Lender.findByPk(app.lender_id, { raw: true });
-            if (lObj) lenderName = lObj.short_name || lObj.name;
+            if (lObj) resolvedLenderNames.push(lObj.name || lObj.short);
           } catch (_) {}
         }
+
+        if (resolvedLenderNames.length === 0 && app.client_preference && app.client_preference !== 'direct_reach' && app.client_preference !== 'partner_routing') {
+          resolvedLenderNames = app.client_preference.split(',').map(s => s.trim()).filter(Boolean);
+        }
+
+        if (resolvedLenderNames.length === 0) {
+          const defaultBankMap = {
+            'Home Loan': ['SBI', 'HDFC Bank', 'ICICI Bank'],
+            'Personal Loan': ['HDFC Bank', 'Axis Bank', 'Bajaj Finserv'],
+            'Business Loan': ['ICICI Bank', 'Kotak Mahindra', 'Bajaj Finserv'],
+            'Vehicle Loan': ['SBI', 'HDFC Bank', 'Bank of Baroda'],
+            'Loan Against Property': ['ICICI Bank', 'Axis Bank', 'PNB Housing']
+          };
+          resolvedLenderNames = defaultBankMap[loanTypeName] || ['SBI', 'HDFC Bank'];
+        }
+
+        const lenderName = resolvedLenderNames.join(', ');
 
         let partnerName = null;
         if (app.partner_id) {
@@ -1753,6 +1827,7 @@ export const getDashboardBundle = async (req, res) => {
           status: statusName,
           stage: stageName,
           lender: lenderName,
+          lenders: resolvedLenderNames,
           source: partnerName ? partnerName : "Direct",
           client_preference: app.client_preference,
           partner_id: app.partner_id,
