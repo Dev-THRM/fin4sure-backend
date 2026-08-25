@@ -366,10 +366,16 @@ export const otpLoginService = async (email, otp) => {
 
   const normalizedEmail = email.toLowerCase().trim();
 
-  // Try users table first
   const user = await User.findOne({ where: { email: normalizedEmail } });
   if (!user) {
     throw new Error('No account found with this email address.');
+  }
+
+  if (expectedRole) {
+    const roleId = expectedRole === 'partner' ? 2 : (expectedRole === 'admin' ? 3 : 1);
+    if (user.role_id !== roleId) {
+      throw new Error(`This user is not a ${expectedRole}, do you want to register?`);
+    }
   }
 
   const accessToken = signAccessToken({
@@ -415,12 +421,19 @@ export const verifyOTPService = async (number, otp) => {
   return true;
 };
 
-export const loginService = async (email, password) => {
+export const loginService = async (email, password, expectedRole) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   const user = await User.findOne({ where: { email: normalizedEmail } });
   if (!user) {
     throw new Error("Invalid credentials");
+  }
+
+  if (expectedRole) {
+    const roleId = expectedRole === 'partner' ? 2 : (expectedRole === 'admin' ? 3 : 1);
+    if (user.role_id !== roleId) {
+      throw new Error(`This user is not a ${expectedRole}, do you want to register?`);
+    }
   }
 
   const isMatch = await bcrypt.compare(password, user.password_hash);

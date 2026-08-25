@@ -178,20 +178,16 @@ export const VerifyEmailOTP = async (req, res) => {
  */
 export const OTPLoginHandler = async (req, res) => {
   try {
-    const { email, otp, role: requestedRole } = req.body;
+    const { email, otp, expectedRole } = req.body;
     if (!email || !otp) {
       return res.status(400).json({ message: 'Email and OTP are required.' });
     }
 
-    const { user, accessToken } = await otpLoginService(email, otp);
+    const { user, accessToken } = await otpLoginService(email, otp, expectedRole);
 
     let role = 'borrower';
     if (user.role_id === 2) role = 'partner';
     if (user.role_id === 3) role = 'admin';
-
-    if (requestedRole && requestedRole !== role && role !== 'admin') {
-      return res.status(403).json({ message: `there is no ${requestedRole} registered with this email` });
-    }
 
     return res
       .cookie('AccessToken', accessToken, {
@@ -233,21 +229,17 @@ export const verifyOTP = async (req, res) => {
 
 export const loginHandler = async (req, res) => {
   try {
-    const { email, password, role: requestedRole } = req.body;
+    const { email, password, expectedRole } = req.body;
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password required" });
     }
 
-    const { user, accessToken } = await loginService(email, password);
+    const { user, accessToken } = await loginService(email, password, expectedRole);
 
     // map role_id back to role string for client
     let role = "borrower";
     if (user.role_id === 2) role = "partner";
     if (user.role_id === 3) role = "admin";
-
-    if (requestedRole && requestedRole !== role && role !== "admin") {
-      return res.status(403).json({ message: `there is no ${requestedRole} registered with this email` });
-    }
 
     return res
       .cookie("AccessToken", accessToken, {
