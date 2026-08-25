@@ -224,13 +224,13 @@ export const referClient = async (req, res) => {
       });
       borrowerId = newBorrower.id;
     } else {
-      // If user exists, update user's name & phone if missing or generic 'Client'
-      if (name && (!clientUser.name || clientUser.name === 'Client')) {
-        clientUser.name = name;
+      // If user exists, update user's name & phone with the newly provided referral details
+      if (name && name.trim()) {
+        clientUser.name = name.trim();
         await clientUser.save();
       }
-      if (number && (!clientUser.mob_no || clientUser.mob_no === '')) {
-        clientUser.mob_no = number;
+      if (number && number.trim()) {
+        clientUser.mob_no = number.trim();
         await clientUser.save();
       }
       const validGender = (gender && ['male', 'female', 'other'].includes(gender.toLowerCase())) ? gender.toLowerCase() : 'other';
