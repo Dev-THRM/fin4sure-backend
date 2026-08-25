@@ -93,11 +93,14 @@ export const sendOtpEmail = async (toEmail, otp) => {
 
 /**
  * Send a welcome/credentials email to a borrower created by a partner (direct reach).
- * @param {string} toEmail    - Borrower's email address
- * @param {string} name       - Borrower's name
- * @param {string} password   - Default plain-text password
+ * @param {string} toEmail      - Borrower's email address
+ * @param {string} name         - Borrower's name
+ * @param {string} password     - Default plain-text password
+ * @param {string} partnerName  - Name of the partner who referred the borrower
+ * @param {string} loanType     - Loan type name (e.g., Home Loan)
+ * @param {number} loanAmount   - Loan amount applied for
  */
-export const sendWelcomeEmail = async (toEmail, name, password) => {
+export const sendWelcomeEmail = async (toEmail, name, password, partnerName = 'your partner', loanType = 'Loan', loanAmount = null) => {
   const mailOptions = {
     from: `"Finn4Sure" <${process.env.GMAIL_USER}>`,
     to: toEmail,
@@ -126,11 +129,31 @@ export const sendWelcomeEmail = async (toEmail, name, password) => {
                     <td style="padding:40px 40px 32px;">
                       <p style="margin:0 0 8px;color:#0f3460;font-size:18px;font-weight:600;">Welcome, ${name}! 🎉</p>
                       <p style="margin:0 0 24px;color:#64748b;font-size:14px;line-height:1.6;">
-                        Your partner has submitted a loan application on your behalf. An account has been created for you on Finn4Sure so you can track your application directly.
+                        <strong>${partnerName}</strong> has submitted a loan application on your behalf through Finn4Sure. An account has been created so you can track your application directly.
                       </p>
+
+                      <!-- Loan Application Details -->
+                      <div style="background:#fefce8;border:2px solid #fde68a;border-radius:12px;padding:20px;margin-bottom:24px;">
+                        <p style="margin:0 0 12px;color:#92400e;font-size:14px;font-weight:700;">📋 Loan Application Details</p>
+                        <table cellpadding="0" cellspacing="0" width="100%">
+                          <tr>
+                            <td style="color:#78350f;font-size:13px;padding:5px 0;width:130px;">Referred by</td>
+                            <td style="color:#1c1917;font-size:13px;font-weight:600;padding:5px 0;">${partnerName}</td>
+                          </tr>
+                          <tr>
+                            <td style="color:#78350f;font-size:13px;padding:5px 0;">Loan Type</td>
+                            <td style="color:#1c1917;font-size:13px;font-weight:600;padding:5px 0;">${loanType}</td>
+                          </tr>
+                          ${loanAmount ? `<tr>
+                            <td style="color:#78350f;font-size:13px;padding:5px 0;">Loan Amount</td>
+                            <td style="color:#1c1917;font-size:13px;font-weight:600;padding:5px 0;">₹${Number(loanAmount).toLocaleString('en-IN')}</td>
+                          </tr>` : ''}
+                        </table>
+                      </div>
+
                       <!-- Credentials Box -->
                       <div style="background:#f0f9ff;border:2px solid #bae6fd;border-radius:12px;padding:24px;margin-bottom:28px;">
-                        <p style="margin:0 0 12px;color:#0f3460;font-size:14px;font-weight:700;">Your Login Credentials</p>
+                        <p style="margin:0 0 12px;color:#0f3460;font-size:14px;font-weight:700;">🔑 Your Login Credentials</p>
                         <table cellpadding="0" cellspacing="0" width="100%">
                           <tr>
                             <td style="color:#64748b;font-size:13px;padding:6px 0;width:100px;">Email ID</td>
