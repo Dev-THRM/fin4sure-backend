@@ -15,6 +15,7 @@ import LenderLoanRates from "../models/lender_loan_rates.js";
 import LoanType from "../models/loan_type.js";
 import PlatformSetting from "../models/platform_settings.model.js";
 import Borrower from "../models/borrower.js";
+import { ALL_LENDERS_DATA } from "../services/lenderSeed.service.js";
 
 const getBrokersList = async () => {
   try {
@@ -1382,139 +1383,102 @@ export const timelineActivity = async (req, res) => {
 };
 
 /* -----------------------------------------------------
-   ADMIN – LENDER INTEREST RATES HELPER
+   ADMIN – LENDER INTEREST RATES HELPER (60+ Banks Constant Ordering)
 ----------------------------------------------------- */
 export const getLenderRatesHelper = async (loanTypeShortId = 'HL') => {
-  let loanTypeId = 1;
-  if (loanTypeShortId) {
-    try {
-      const lt = await LoanType.findOne({ 
-        where: { short_id: loanTypeShortId } 
-      });
-      if (lt) loanTypeId = lt.id;
-    } catch (_) {}
-  }
-
-  let lenders = [];
-  try {
-    lenders = await Lender.findAll({
-      order: [['name', 'ASC']],
-      raw: true
-    });
-  } catch (_) {}
-
-  if (!lenders || lenders.length === 0) {
-    try {
-      lenders = await Bank.findAll({ raw: true });
-    } catch (_) {}
-  }
-
-  if (!lenders || lenders.length === 0) {
-    lenders = [
-      { id: 1, name: 'SBI', type: 'PSU', offer: 'Zero PF on home' },
-      { id: 2, name: 'HDFC Bank', type: 'Private', offer: 'Pre-approved off' },
-      { id: 3, name: 'ICICI Bank', type: 'Private', offer: 'Instant in-princip' },
-      { id: 4, name: 'Axis Bank', type: 'Private', offer: 'Offer text' },
-      { id: 5, name: 'Kotak Mahindra', type: 'Private', offer: 'Offer text' },
-      { id: 6, name: 'Bajaj Finserv', type: 'NBFC/HFC', offer: 'Pre-approved pei' },
-      { id: 7, name: 'PNB Housing', type: 'NBFC/HFC', offer: 'Offer text' },
-      { id: 8, name: 'LIC Housing', type: 'NBFC/HFC', offer: 'Griha Lakshmi Sp' },
-      { id: 9, name: 'Tata Capital', type: 'NBFC/HFC', offer: 'Digital home loan' },
-      { id: 10, name: 'Bank of Baroda', type: 'PSU', offer: 'Offer text' }
-    ];
-  }
-
-  const categoryPresets = {
-    HL: {
-      1: { flowLow: "7.10", flowHigh: "9.65", fixLow: "8.70", fixHigh: "11.20", offer: "Zero PF on home" },
-      2: { flowLow: "7.20", flowHigh: "9.80", fixLow: "8.80", fixHigh: "11.50", offer: "Pre-approved off" },
-      3: { flowLow: "7.25", flowHigh: "9.90", fixLow: "8.90", fixHigh: "11.60", offer: "Instant in-princip" },
-      4: { flowLow: "7.30", flowHigh: "10.00", fixLow: "9.00", fixHigh: "11.70", offer: "Special concession" },
-      5: { flowLow: "7.40", flowHigh: "9.75", fixLow: "9.00", fixHigh: "11.50", offer: "Reduced processing fee" },
-      6: { flowLow: "7.25", flowHigh: "10.50", fixLow: "9.00", fixHigh: "12.00", offer: "Pre-approved pei" },
-      7: { flowLow: "7.50", flowHigh: "13.45", fixLow: "9.00", fixHigh: "14.00", offer: "Custom tenure plans" },
-      8: { flowLow: "7.50", flowHigh: "10.35", fixLow: "9.50", fixHigh: "12.00", offer: "Griha Lakshmi Sp" },
-      9: { flowLow: "8.50", flowHigh: "11.00", fixLow: "9.50", fixHigh: "12.00", offer: "Digital home loan" },
-      10: { flowLow: "7.10", flowHigh: "9.60", fixLow: "8.60", fixHigh: "11.10", offer: "Zero processing fee" }
-    },
-    PL: {
-      1: { flowLow: "10.50", flowHigh: "14.50", fixLow: "11.50", fixHigh: "15.50", offer: "Quick 10-min approval" },
-      2: { flowLow: "10.75", flowHigh: "15.00", fixLow: "11.75", fixHigh: "16.00", offer: "Pre-approved salary offer" },
-      3: { flowLow: "10.65", flowHigh: "14.75", fixLow: "11.65", fixHigh: "15.75", offer: "Instant disbursement" },
-      4: { flowLow: "10.99", flowHigh: "15.50", fixLow: "12.00", fixHigh: "16.50", offer: "Zero documentation charge" },
-      5: { flowLow: "10.90", flowHigh: "15.25", fixLow: "11.90", fixHigh: "16.25", offer: "Flexible repayment tenure" },
-      6: { flowLow: "11.50", flowHigh: "16.50", fixLow: "12.50", fixHigh: "18.00", offer: "No collateral required" },
-      7: { flowLow: "11.75", flowHigh: "16.00", fixLow: "12.75", fixHigh: "17.50", offer: "Low EMI options" },
-      8: { flowLow: "11.25", flowHigh: "15.50", fixLow: "12.25", fixHigh: "16.75", offer: "Special staff ROI" },
-      9: { flowLow: "11.99", flowHigh: "17.00", fixLow: "13.00", fixHigh: "18.50", offer: "100% digital process" },
-      10: { flowLow: "10.40", flowHigh: "14.25", fixLow: "11.40", fixHigh: "15.25", offer: "Minimal documentation" }
-    },
-    BL: {
-      1: { flowLow: "11.25", flowHigh: "16.00", fixLow: "12.50", fixHigh: "17.25", offer: "Working capital special" },
-      2: { flowLow: "11.50", flowHigh: "16.50", fixLow: "12.75", fixHigh: "17.75", offer: "Collateral free up to 50L" },
-      3: { flowLow: "11.40", flowHigh: "16.25", fixLow: "12.60", fixHigh: "17.50", offer: "MSME growth loan" },
-      4: { flowLow: "11.75", flowHigh: "17.00", fixLow: "13.00", fixHigh: "18.25", offer: "Overdraft facility" },
-      5: { flowLow: "11.90", flowHigh: "17.25", fixLow: "13.15", fixHigh: "18.50", offer: "Custom EMI schedule" },
-      6: { flowLow: "12.50", flowHigh: "18.50", fixLow: "13.75", fixHigh: "19.75", offer: "Fast track 48hr disbursal" },
-      7: { flowLow: "12.75", flowHigh: "18.00", fixLow: "14.00", fixHigh: "19.50", offer: "Machinery finance discount" },
-      8: { flowLow: "12.00", flowHigh: "17.50", fixLow: "13.25", fixHigh: "18.75", offer: "Low processing fee" },
-      9: { flowLow: "13.00", flowHigh: "19.50", fixLow: "14.50", fixHigh: "21.00", offer: "Unsecured business loan" },
-      10: { flowLow: "11.10", flowHigh: "15.75", fixLow: "12.10", fixHigh: "16.75", offer: "Mudra & MSME scheme" }
-    },
-    VL: {
-      1: { flowLow: "8.75", flowHigh: "11.00", fixLow: "9.50", fixHigh: "12.00", offer: "100% on-road funding" },
-      2: { flowLow: "8.85", flowHigh: "11.25", fixLow: "9.65", fixHigh: "12.25", offer: "Zero foreclosure charges" },
-      3: { flowLow: "8.80", flowHigh: "11.15", fixLow: "9.60", fixHigh: "12.15", offer: "Pre-approved car loan" },
-      4: { flowLow: "8.99", flowHigh: "11.50", fixLow: "9.85", fixHigh: "12.50", offer: "Instant approval on app" },
-      5: { flowLow: "9.10", flowHigh: "11.75", fixLow: "9.95", fixHigh: "12.75", offer: "EV vehicle discount" },
-      6: { flowLow: "9.25", flowHigh: "12.50", fixLow: "10.25", fixHigh: "13.50", offer: "Used car finance offer" },
-      7: { flowLow: "9.50", flowHigh: "12.75", fixLow: "10.50", fixHigh: "13.75", offer: "Commercial vehicle special" },
-      8: { flowLow: "9.00", flowHigh: "11.80", fixLow: "9.90", fixHigh: "12.80", offer: "Low EMI tenure" },
-      9: { flowLow: "9.75", flowHigh: "13.00", fixLow: "10.75", fixHigh: "14.00", offer: "Two-wheeler instant loan" },
-      10: { flowLow: "8.70", flowHigh: "10.90", fixLow: "9.40", fixHigh: "11.90", offer: "Baroda auto loan scheme" }
-    },
-    LAP: {
-      1: { flowLow: "9.25", flowHigh: "12.00", fixLow: "10.25", fixHigh: "13.00", offer: "High LTV ratio funding" },
-      2: { flowLow: "9.50", flowHigh: "12.25", fixLow: "10.50", fixHigh: "13.25", offer: "Commercial property LAP" },
-      3: { flowLow: "9.40", flowHigh: "12.15", fixLow: "10.40", fixHigh: "13.15", offer: "Residential LAP discount" },
-      4: { flowLow: "9.65", flowHigh: "12.50", fixLow: "10.65", fixHigh: "13.50", offer: "Balance transfer + Topup" },
-      5: { flowLow: "9.75", flowHigh: "12.75", fixLow: "10.75", fixHigh: "13.75", offer: "Flexible repayment plan" },
-      6: { flowLow: "10.25", flowHigh: "13.50", fixLow: "11.25", fixHigh: "14.50", offer: "High value LAP disbursal" },
-      7: { flowLow: "10.50", flowHigh: "13.75", fixLow: "11.50", fixHigh: "14.75", offer: "Industrial property LAP" },
-      8: { flowLow: "9.60", flowHigh: "12.30", fixLow: "10.60", fixHigh: "13.30", offer: "Low documentation fee" },
-      9: { flowLow: "10.75", flowHigh: "14.00", fixLow: "11.75", fixHigh: "15.00", offer: "Fast legal valuation" },
-      10: { flowLow: "9.15", flowHigh: "11.85", fixLow: "10.15", fixHigh: "12.85", offer: "Special PSU LAP rates" }
-    }
+  const shortIdMap = {
+    'HL': 'home',
+    'home': 'home',
+    'PL': 'personal',
+    'personal': 'personal',
+    'BL': 'business',
+    'business': 'business',
+    'VL': 'vehicle',
+    'vehicle': 'vehicle',
+    'LAP': 'lap',
+    'lap': 'lap'
   };
 
-  const selectedPresets = categoryPresets[loanTypeShortId] || categoryPresets.HL;
+  const targetCategory = shortIdMap[loanTypeShortId] || 'home';
+  let loanTypeId = 1;
+  try {
+    const lt = await LoanType.findOne({ where: { short_id: targetCategory } });
+    if (lt) loanTypeId = lt.id;
+  } catch (_) {}
+
+  // Fetch all existing lenders from DB once for quick lookup
+  let dbLenders = [];
+  try {
+    dbLenders = await Lender.findAll({ raw: true });
+  } catch (_) {}
+
+  const dbLenderMap = new Map();
+  dbLenders.forEach(l => {
+    dbLenderMap.set(l.name, l);
+    if (l.short) dbLenderMap.set(l.short, l);
+  });
 
   return await Promise.all(
-    lenders.map(async (lender, idx) => {
+    ALL_LENDERS_DATA.map(async (bank, idx) => {
+      const dbLender = dbLenderMap.get(bank.name) || dbLenderMap.get(bank.short);
+      const lenderId = dbLender ? dbLender.id : (idx + 1);
+
       let floatRate = null;
       let fixedRate = null;
-      try {
-        floatRate = await LenderLoanRates.findOne({
-          where: { lender_id: lender.id, loan_type_id: loanTypeId, rate_type: 'floating' },
-          raw: true
-        });
-        fixedRate = await LenderLoanRates.findOne({
-          where: { lender_id: lender.id, loan_type_id: loanTypeId, rate_type: 'fixed' },
-          raw: true
-        });
-      } catch (_) {}
+      if (dbLender) {
+        try {
+          floatRate = await LenderLoanRates.findOne({
+            where: { lender_id: dbLender.id, loan_type_id: loanTypeId, rate_type: 'floating' },
+            raw: true
+          });
+          fixedRate = await LenderLoanRates.findOne({
+            where: { lender_id: dbLender.id, loan_type_id: loanTypeId, rate_type: 'fixed' },
+            raw: true
+          });
+        } catch (_) {}
+      }
 
-      const preset = selectedPresets[lender.id || (idx + 1)] || { flowLow: "8.5", flowHigh: "11.0", fixLow: "9.5", fixHigh: "12.0", offer: "Special interest rate offer" };
+      const defaultCategoryRates = bank.rates?.[targetCategory];
+      const defaultFlow = defaultCategoryRates ? defaultCategoryRates.f : null;
+      const defaultFix = defaultCategoryRates ? defaultCategoryRates.x : null;
+
+      let flowLow = "N/A";
+      let flowHigh = "N/A";
+      if (defaultFlow === null) {
+        flowLow = "N/A";
+        flowHigh = "N/A";
+      } else if (floatRate && floatRate.min_rate !== null && floatRate.min_rate !== undefined) {
+        flowLow = String(floatRate.min_rate);
+        flowHigh = String(floatRate.max_rate || floatRate.min_rate);
+      } else if (defaultFlow && Array.isArray(defaultFlow) && defaultFlow.length === 2) {
+        flowLow = String(defaultFlow[0]);
+        flowHigh = String(defaultFlow[1]);
+      }
+
+      let fixLow = "N/A";
+      let fixHigh = "N/A";
+      if (defaultFix === null) {
+        fixLow = "N/A";
+        fixHigh = "N/A";
+      } else if (fixedRate && fixedRate.min_rate !== null && fixedRate.min_rate !== undefined) {
+        fixLow = String(fixedRate.min_rate);
+        fixHigh = String(fixedRate.max_rate || fixedRate.min_rate);
+      } else if (defaultFix && Array.isArray(defaultFix) && defaultFix.length === 2) {
+        fixLow = String(defaultFix[0]);
+        fixHigh = String(defaultFix[1]);
+      }
 
       return {
-        lenderId: lender.id,
-        name: lender.name || lender.bank_name || 'Bank',
-        type: lender.type || "Private",
-        flowLow: floatRate ? String(floatRate.min_rate) : preset.flowLow,
-        flowHigh: floatRate ? String(floatRate.max_rate) : preset.flowHigh,
-        fixLow: fixedRate ? String(fixedRate.min_rate) : preset.fixLow,
-        fixHigh: fixedRate ? String(fixedRate.max_rate) : preset.fixHigh,
-        offer: floatRate?.offer || fixedRate?.offer || lender.offer || preset.offer || "Special interest rate offer",
+        lenderId,
+        name: bank.name,
+        short: bank.short,
+        type: bank.type || (dbLender?.type ? (dbLender.type.toUpperCase() === 'PSU' ? 'PSU' : dbLender.type.toLowerCase().includes('nbfc') ? 'NBFC/HFC' : dbLender.type.toLowerCase().includes('small') ? 'SFB' : 'Private') : "Private"),
+        emoji: bank.emoji || '🏦',
+        flowLow,
+        flowHigh,
+        fixLow,
+        fixHigh,
+        offer: floatRate?.offer || fixedRate?.offer || dbLender?.offer || bank.offer || "Special interest rate offer",
         visible: true
       };
     })
@@ -1536,51 +1500,72 @@ export const updateLenderRates = async (req, res) => {
   try {
     const { rates, loanTypeShortId } = req.body;
     
-    let loanTypeId = 1;
-    if (loanTypeShortId) {
-      const lt = await LoanType.findOne({ where: { short_id: loanTypeShortId } });
-      if (lt) loanTypeId = lt.id;
-    }
+    const shortIdMap = {
+      'HL': 'home',
+      'home': 'home',
+      'PL': 'personal',
+      'personal': 'personal',
+      'BL': 'business',
+      'business': 'business',
+      'VL': 'vehicle',
+      'vehicle': 'vehicle',
+      'LAP': 'lap',
+      'lap': 'lap'
+    };
+
+    const targetCategory = shortIdMap[loanTypeShortId] || 'home';
+    let lt = await LoanType.findOne({ where: { short_id: targetCategory } });
+    const loanTypeId = lt ? lt.id : 1;
 
     for (const r of rates) {
-      const [floatRate, createdFloat] = await LenderLoanRates.findOrCreate({
-        where: { lender_id: r.lenderId, loan_type_id: loanTypeId, rate_type: 'floating' },
-        defaults: {
-          min_rate: parseFloat(r.flowLow) || 8.5,
-          max_rate: parseFloat(r.flowHigh) || 11.0,
-          offer: r.offer,
-          processing_fee: 0,
-          max_tenure: 30,
-          max_amount: 10000000,
-          effective_from: new Date()
-        }
-      });
-      if (!createdFloat) {
-        await floatRate.update({
-          min_rate: parseFloat(r.flowLow) || 8.5,
-          max_rate: parseFloat(r.flowHigh) || 11.0,
-          offer: r.offer
+      if (!r.lenderId) continue;
+
+      const flowMin = parseFloat(r.flowLow);
+      const flowMax = parseFloat(r.flowHigh);
+      if (!isNaN(flowMin)) {
+        const [floatRate, createdFloat] = await LenderLoanRates.findOrCreate({
+          where: { lender_id: r.lenderId, loan_type_id: loanTypeId, rate_type: 'floating' },
+          defaults: {
+            min_rate: flowMin,
+            max_rate: isNaN(flowMax) ? flowMin : flowMax,
+            offer: r.offer,
+            processing_fee: 0,
+            max_tenure: 360,
+            max_amount: 50000000,
+            effective_from: new Date()
+          }
         });
+        if (!createdFloat) {
+          await floatRate.update({
+            min_rate: flowMin,
+            max_rate: isNaN(flowMax) ? flowMin : flowMax,
+            offer: r.offer
+          });
+        }
       }
 
-      const [fixedRate, createdFixed] = await LenderLoanRates.findOrCreate({
-        where: { lender_id: r.lenderId, loan_type_id: loanTypeId, rate_type: 'fixed' },
-        defaults: {
-          min_rate: parseFloat(r.fixLow) || 9.5,
-          max_rate: parseFloat(r.fixHigh) || 12.0,
-          offer: r.offer,
-          processing_fee: 0,
-          max_tenure: 30,
-          max_amount: 10000000,
-          effective_from: new Date()
-        }
-      });
-      if (!createdFixed) {
-        await fixedRate.update({
-          min_rate: parseFloat(r.fixLow) || 9.5,
-          max_rate: parseFloat(r.fixHigh) || 12.0,
-          offer: r.offer
+      const fixMin = parseFloat(r.fixLow);
+      const fixMax = parseFloat(r.fixHigh);
+      if (!isNaN(fixMin)) {
+        const [fixedRate, createdFixed] = await LenderLoanRates.findOrCreate({
+          where: { lender_id: r.lenderId, loan_type_id: loanTypeId, rate_type: 'fixed' },
+          defaults: {
+            min_rate: fixMin,
+            max_rate: isNaN(fixMax) ? fixMin : fixMax,
+            offer: r.offer,
+            processing_fee: 0,
+            max_tenure: 360,
+            max_amount: 50000000,
+            effective_from: new Date()
+          }
         });
+        if (!createdFixed) {
+          await fixedRate.update({
+            min_rate: fixMin,
+            max_rate: isNaN(fixMax) ? fixMin : fixMax,
+            offer: r.offer
+          });
+        }
       }
     }
 
@@ -1988,5 +1973,41 @@ export const getDashboardBundle = async (req, res) => {
       timeline: [],
       rates: []
     });
+  }
+};
+
+/* -----------------------------------------------------
+   ADMIN – DIRECT BANK SCRAPER CONTROLLERS
+----------------------------------------------------- */
+export const triggerBankScraper = async (req, res) => {
+  try {
+    const { executeScraperJob } = await import("../services/scraperScheduler.service.js");
+    const result = await executeScraperJob();
+    res.json(result);
+  } catch (err) {
+    console.error("triggerBankScraper error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const getScraperStatusController = async (req, res) => {
+  try {
+    const { getScraperState } = await import("../services/scraperScheduler.service.js");
+    res.json(getScraperState());
+  } catch (err) {
+    console.error("getScraperStatusController error:", err);
+    res.status(500).json({ message: "Failed to get scraper status" });
+  }
+};
+
+export const updateScraperScheduleController = async (req, res) => {
+  try {
+    const { day } = req.body;
+    const { updateScraperDay } = await import("../services/scraperScheduler.service.js");
+    const state = updateScraperDay(day || "Monday");
+    res.json({ success: true, state });
+  } catch (err) {
+    console.error("updateScraperScheduleController error:", err);
+    res.status(400).json({ success: false, message: err.message });
   }
 };

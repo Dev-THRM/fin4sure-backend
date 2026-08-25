@@ -170,6 +170,10 @@ const startServer = async () => {
     }
 
     console.log("Database connected successfully");
+    try {
+      const { startScraperCron } = await import("./services/scraperScheduler.service.js");
+      startScraperCron("Monday");
+    } catch (_) {}
     startScraperScheduler();
   } catch (error) {
     console.error("Database initialization notice:", error.message);

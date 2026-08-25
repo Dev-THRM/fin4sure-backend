@@ -20,7 +20,10 @@ import {
   updateLenderRates,
   getPlatformSettings,
   updatePlatformSettings,
-  getDashboardBundle
+  getDashboardBundle,
+  triggerBankScraper,
+  getScraperStatusController,
+  updateScraperScheduleController
 } from "../controllers/admin.controller.js";
 
 import { verifyUser, isAdmin } from "../middlewares/auth.middleware.js";
@@ -66,5 +69,10 @@ router.get("/lender-rates", verifyUser, isAdmin, getLenderRates);
 router.post("/lender-rates", verifyUser, isAdmin, updateLenderRates);
 router.get("/platform-settings", verifyUser, isAdmin, getPlatformSettings);
 router.post("/platform-settings", verifyUser, isAdmin, updatePlatformSettings);
+
+/* ---------- DIRECT BANK SCRAPER & SCHEDULE ---------- */
+router.post("/scraper/run", verifyUser, isAdmin, triggerBankScraper);
+router.get("/scraper/status", verifyUser, isAdmin, getScraperStatusController);
+router.post("/scraper/schedule", verifyUser, isAdmin, updateScraperScheduleController);
 
 export default router;
