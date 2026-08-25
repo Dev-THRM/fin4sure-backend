@@ -9,6 +9,9 @@ import Pincode from "../models/pincode.js";
 import City from "../models/city.js";
 import District from "../models/district.js";
 import State from "../models/state.js";
+import Lender from "../models/lender.js";
+import Lender_Loan_Rates from "../models/lender_loan_rates.js";
+import Lender_Application from "../models/lender_application.js";
 import bcrypt from "bcrypt";
 import { Op } from "sequelize";
 import axios from "axios";
@@ -288,6 +291,8 @@ export const referClient = async (req, res) => {
       applicationNo = maxAppNo + 1;
     }
 
+    const selectedLenders = req.body.selected_lenders || req.body.selectedLenders || req.body.preferred_lenders || [];
+
     const application = await Loan_Application.create({
       application_no: applicationNo,
       borrower_id: borrowerId,
@@ -300,6 +305,91 @@ export const referClient = async (req, res) => {
       client_preference: clientPref,
       status_id: 2, // Applied complete -> Current stage is Docs (ID: 2)
     });
+
+    // Handle Lender Applications for multiple selected preferred lenders
+    let firstLenderId = preferred_lender_id ? parseInt(preferred_lender_id) : null;
+
+    if (Array.isArray(selectedLenders) && selectedLenders.length > 0) {
+      for (const lenderItem of selectedLenders) {
+        try {
+          let lenderObj = null;
+          if (typeof lenderItem === 'number' || (!isNaN(lenderItem) && !isNaN(parseInt(lenderItem)) && typeof lenderItem !== 'string')) {
+            lenderObj = await Lender.findByPk(parseInt(lenderItem));
+          } else if (typeof lenderItem === 'string' && lenderItem.trim()) {
+            const cleanName = lenderItem.trim();
+            lenderObj = await Lender.findOne({
+              where: {
+                [Op.or]: [
+                  { name: cleanName },
+                  { short: cleanName }
+                ]
+              }
+            });
+            if (!lenderObj) {
+              lenderObj = await Lender.create({
+                name: cleanName,
+                short: cleanName,
+                type: 'private'
+              });
+            }
+          }
+
+          if (lenderObj) {
+            if (!firstLenderId) firstLenderId = lenderObj.id;
+
+            const [rateObj] = await Lender_Loan_Rates.findOrCreate({
+              where: {
+                lender_id: lenderObj.id,
+                loan_type_id: parseInt(loan_type_id)
+              },
+              defaults: {
+                rate_type: 'floating',
+                min_rate: 8.5,
+                max_rate: 14.5
+              }
+            });
+
+            if (rateObj) {
+              await Lender_Application.create({
+                loan_application_id: application.id,
+                lender_rate_id: rateObj.id,
+                status: 'pending'
+              });
+            }
+          }
+        } catch (lErr) {
+          console.error("Error attaching lender application:", lErr.message);
+        }
+      }
+    } else if (firstLenderId) {
+      try {
+        const [rateObj] = await Lender_Loan_Rates.findOrCreate({
+          where: {
+            lender_id: firstLenderId,
+            loan_type_id: parseInt(loan_type_id)
+          },
+          defaults: {
+            rate_type: 'floating',
+            min_rate: 8.5,
+            max_rate: 14.5
+          }
+        });
+        if (rateObj) {
+          await Lender_Application.create({
+            loan_application_id: application.id,
+            lender_rate_id: rateObj.id,
+            status: 'pending'
+          });
+        }
+      } catch (lErr) {
+        console.error("Error attaching single lender application:", lErr.message);
+      }
+    }
+
+    if (firstLenderId && !application.lender_id) {
+      application.lender_id = firstLenderId;
+      await application.save();
+    }
 
     let waCredentials = null;
     if (clientPref === 'direct_reach' && isNewUser && email) {
