@@ -9,6 +9,8 @@ import {
   sendEmailOTPService,
   verifyEmailOTPService,
   otpLoginService,
+  resetPasswordService,
+  changePasswordService,
 } from "../services/auth.service.js";
 import { signAccessToken } from "../utils/jwt.utlis.js";
 import Partner from "../models/partner.model.js";
@@ -612,3 +614,37 @@ export const adminLoginHandler = async (req, res) => {
 // export const profileHandler = async (req, res) => { ... }
 // export const profileUpdateHandeler = async (req, res) => { ... }
 */
+
+// ==========================================
+// Forgot / Reset Password Handler
+// ==========================================
+export const resetPasswordHandler = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ message: "Email, OTP, and new password are required." });
+    }
+    const result = await resetPasswordService(email, otp, newPassword);
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("resetPasswordHandler error:", error.message);
+    res.status(400).json({ message: error.message || "Failed to reset password." });
+  }
+};
+
+// ==========================================
+// Change Password Handler (Profile Settings)
+// ==========================================
+export const changePasswordHandler = async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ message: "Both old and new passwords are required." });
+    }
+    const result = await changePasswordService(req.user.id, oldPassword, newPassword);
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("changePasswordHandler error:", error.message);
+    res.status(400).json({ message: error.message || "Failed to change password." });
+  }
+};

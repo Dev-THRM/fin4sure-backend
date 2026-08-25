@@ -15,6 +15,8 @@ import {
   SendEmailOTP,
   VerifyEmailOTP,
   OTPLoginHandler,
+  resetPasswordHandler,
+  changePasswordHandler,
 } from "../controllers/auth.controller.js";
 import { verifyUser } from "../middlewares/auth.middleware.js"; // protects routes
 
@@ -40,5 +42,9 @@ authRouter.get("/profile", verifyUser, profileHandler);            // Get profil
 authRouter.post("/update-number-otp", verifyUser, sendUpdateNumberOTP); // Send OTP for number update
 authRouter.post("/verify-update-number-otp", verifyUser, verifyUpdateNumberOTP); // Verify OTP for number update
 authRouter.patch("/profileupdate", verifyUser, profileUpdateHandeler);
+authRouter.post("/change-password", verifyUser, changePasswordHandler); // Change password from profile
+
+// Forgot Password
+authRouter.post("/reset-password", resetPasswordHandler); // Reset password using OTP
 
 export default authRouter;
