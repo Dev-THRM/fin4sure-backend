@@ -1823,25 +1823,43 @@ export const getDashboardBundle = async (req, res) => {
         }
 
         let resolvedLenderNames = [];
+        let activeLenderName = null;
+        let pendingLenderNames = [];
+
         try {
           const [lenderRows] = await sequelize.query(`
-            SELECT DISTINCT COALESCE(l.name, l.short) AS lender_name
+            SELECT 
+              lap.status AS lap_status,
+              COALESCE(l.name, l.short) AS lender_name
             FROM lender_applications lap
             LEFT JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
             LEFT JOIN lenders l ON l.id = llr.lender_id
             WHERE lap.loan_application_id = ${sequelize.escape(app.id)} AND l.name IS NOT NULL
+            ORDER BY lap.id ASC
           `);
-          resolvedLenderNames = lenderRows.map(r => r.lender_name).filter(Boolean);
+
+          lenderRows.forEach(r => {
+            const st = String(r.lap_status || '').toLowerCase().trim();
+            if (st === 'active') {
+              activeLenderName = r.lender_name;
+            } else if (st === 'pending') {
+              if (!pendingLenderNames.includes(r.lender_name)) {
+                pendingLenderNames.push(r.lender_name);
+              }
+            }
+          });
         } catch (_) {}
 
-        if (resolvedLenderNames.length === 0 && app.lender_id) {
+        if (activeLenderName) {
+          resolvedLenderNames = [activeLenderName];
+        } else if (app.lender_id) {
           try {
             const lObj = await Lender.findByPk(app.lender_id, { raw: true });
-            if (lObj) resolvedLenderNames.push(lObj.name || lObj.short);
+            if (lObj) resolvedLenderNames = [lObj.name || lObj.short];
           } catch (_) {}
-        }
-
-        if (resolvedLenderNames.length === 0 && app.client_preference && app.client_preference !== 'direct_reach' && app.client_preference !== 'partner_routing') {
+        } else if (pendingLenderNames.length > 0) {
+          resolvedLenderNames = pendingLenderNames;
+        } else if (app.client_preference && app.client_preference !== 'direct_reach' && app.client_preference !== 'partner_routing') {
           resolvedLenderNames = app.client_preference.split(',').map(s => s.trim()).filter(Boolean);
         }
 
@@ -1888,6 +1906,8 @@ export const getDashboardBundle = async (req, res) => {
           stage: stageName,
           lender: lenderName,
           lenders: resolvedLenderNames,
+          all_selected_lenders: pendingLenderNames.length > 0 ? pendingLenderNames : resolvedLenderNames,
+          active_lender: activeLenderName || (app.lender_id ? resolvedLenderNames[0] : null),
           source: partnerName ? partnerName : "Direct",
           client_preference: app.client_preference,
           partner_id: app.partner_id,
