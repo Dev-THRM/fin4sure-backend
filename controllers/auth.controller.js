@@ -257,7 +257,7 @@ export const loginHandler = async (req, res) => {
       });
   } catch (err) {
     console.error("Login error:", err);
-    if (err.message === "Invalid credentials") {
+    if (err.message === "Invalid credentials" || err.message.includes("do you want to register?")) {
       return res.status(401).json({ message: err.message });
     }
     return res.status(500).json({ message: "Internal server error" });
