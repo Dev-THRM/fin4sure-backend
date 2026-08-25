@@ -91,7 +91,7 @@ export const applyLoan = async (req, res) => {
       loan_amount: Number(loanAmount) || 500000,
       loan_purpose: loan_purpose || product || "Loan Application",
       tenure: Number(tenure) || 12,
-      status_id: 1, // applied
+      status_id: 2, // Applied complete -> Current stage is Docs (ID: 2)
       partner_id: null,
       lender_id: null,
       client_preference: null

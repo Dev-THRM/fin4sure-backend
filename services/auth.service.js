@@ -192,7 +192,7 @@ export const registerBorrowerService = async (data) => {
       loan_amount: loanAmount || 0,
       loan_purpose: loanPurpose || "Loan Application",
       tenure: tenure || 12,
-      status_id: 1, // Default status e.g., 'Under Review'
+      status_id: 2, // Applied complete -> Current stage is Docs (ID: 2)
       partner_id: partnerIdVal,
       client_preference: partnerIdVal ? 'partner_routing' : null
     }, { transaction });
