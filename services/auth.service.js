@@ -473,3 +473,54 @@ export const profileUpdateService = async (userId, updateData) => {
   await user.update(updateData);
   return await User.findByPk(userId, { attributes: { exclude: ['password_hash'] } });
 };
+
+export const resetPasswordService = async (email, otp, newPassword) => {
+  const normalizedEmail = email.toLowerCase().trim();
+  
+  // 1. Verify OTP first
+  const otpRecord = await OtpVerification.findOne({
+    where: { identifier: normalizedEmail, purpose: 'login' },
+    order: [['createdAt', 'DESC']]
+  });
+
+  if (!otpRecord) throw new Error("No OTP found. Please request a new one.");
+  
+  if (otpRecord.expiresAt < new Date()) {
+    throw new Error("OTP has expired. Please request a new one.");
+  }
+
+  const isMatch = await bcrypt.compare(otp, otpRecord.otpHash);
+  if (!isMatch) throw new Error("Invalid OTP");
+
+  // 2. Find user
+  const user = await User.findOne({ where: { email: normalizedEmail } });
+  if (!user) throw new Error("User not found");
+
+  // 3. Update password
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(newPassword, salt);
+  user.password_hash = hashedPassword;
+  await user.save();
+
+  // 4. Delete OTP so it cannot be reused
+  await OtpVerification.destroy({ where: { identifier: normalizedEmail, purpose: 'login' } });
+
+  return { message: "Password reset successfully." };
+};
+
+export const changePasswordService = async (userId, oldPassword, newPassword) => {
+  const user = await User.findByPk(userId);
+  if (!user) throw new Error("User not found");
+
+  if (user.password_hash) {
+    const isMatch = await bcrypt.compare(oldPassword, user.password_hash);
+    if (!isMatch) throw new Error("Incorrect current password");
+  }
+
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(newPassword, salt);
+  user.password_hash = hashedPassword;
+  await user.save();
+
+  return { message: "Password updated successfully." };
+};
