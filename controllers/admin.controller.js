@@ -482,7 +482,7 @@ export const allLeads = async (req, res) => {
 
     // Fetch all lender applications for multiple lenders per loan, tracking active vs pending/inactive status
     const appActiveLenderMap = new Map();
-    const appAllLendersMap = new Map();
+    const appPendingLendersMap = new Map();
     try {
       const [lenderApps] = await sequelize.query(`
         SELECT 
@@ -496,14 +496,18 @@ export const allLeads = async (req, res) => {
         ORDER BY lap.id ASC
       `);
       lenderApps.forEach(row => {
-        if (!appAllLendersMap.has(row.loan_application_id)) {
-          appAllLendersMap.set(row.loan_application_id, []);
-        }
-        if (!appAllLendersMap.get(row.loan_application_id).includes(row.lender_name)) {
-          appAllLendersMap.get(row.loan_application_id).push(row.lender_name);
-        }
-        if (row.lap_status === 'active') {
-          appActiveLenderMap.set(row.loan_application_id, row.lender_name);
+        const idKey = String(row.loan_application_id);
+        const st = String(row.lap_status || '').toLowerCase().trim();
+
+        if (st === 'active') {
+          appActiveLenderMap.set(idKey, row.lender_name);
+        } else if (st === 'pending') {
+          if (!appPendingLendersMap.has(idKey)) {
+            appPendingLendersMap.set(idKey, []);
+          }
+          if (!appPendingLendersMap.get(idKey).includes(row.lender_name)) {
+            appPendingLendersMap.get(idKey).push(row.lender_name);
+          }
         }
       });
     } catch (_) {}
@@ -548,14 +552,16 @@ export const allLeads = async (req, res) => {
         ? (String(app.application_no).startsWith('F4S') ? app.application_no : `F4S-${app.application_no}`)
         : `F4S-${2000 + app.id}`;
 
-      // Resolve assigned lender: active lender takes priority; otherwise candidate lenders list
+      const appIdKey = String(app.id);
+
+      // Resolve assigned lender: active lender takes priority; otherwise pending candidate lenders list
       let resolvedLenderNames = [];
-      if (appActiveLenderMap.has(app.id)) {
-        resolvedLenderNames = [appActiveLenderMap.get(app.id)];
-      } else if (appAllLendersMap.has(app.id) && appAllLendersMap.get(app.id).length > 0) {
-        resolvedLenderNames = appAllLendersMap.get(app.id);
+      if (appActiveLenderMap.has(appIdKey)) {
+        resolvedLenderNames = [appActiveLenderMap.get(appIdKey)];
       } else if (app.direct_lender_name) {
         resolvedLenderNames = [app.direct_lender_name];
+      } else if (appPendingLendersMap.has(appIdKey) && appPendingLendersMap.get(appIdKey).length > 0) {
+        resolvedLenderNames = appPendingLendersMap.get(appIdKey);
       } else if (app.client_preference && app.client_preference !== 'direct_reach' && app.client_preference !== 'partner_routing') {
         resolvedLenderNames = app.client_preference.split(',').map(s => s.trim()).filter(Boolean);
       }
@@ -586,8 +592,8 @@ export const allLeads = async (req, res) => {
         stage: rawStatus,
         lender: lenderString,
         lenders: resolvedLenderNames,
-        all_selected_lenders: appAllLendersMap.get(app.id) || resolvedLenderNames,
-        active_lender: appActiveLenderMap.get(app.id) || null,
+        all_selected_lenders: appPendingLendersMap.get(appIdKey) || resolvedLenderNames,
+        active_lender: appActiveLenderMap.get(appIdKey) || app.direct_lender_name || null,
         source: app.partner_name || "Direct",
         client_preference: app.client_preference,
         partner_id: app.partner_id,
@@ -788,29 +794,28 @@ export const updateApplication = async (req, res) => {
           });
 
           if (rateObj) {
-            // Set all existing lender_applications for this loan to 'inactive'
-            await Lender_Application.update(
-              { status: 'inactive' },
-              { where: { loan_application_id: app.id } }
+            // 1. Set all existing lender_applications for this loan to 'inactive'
+            await sequelize.query(
+              `UPDATE lender_applications SET status = 'inactive', updatedAt = NOW() WHERE loan_application_id = :appId`,
+              { replacements: { appId: app.id } }
             );
 
-            // Find or create the chosen lender_application with status 'active'
-            const existingLap = await Lender_Application.findOne({
-              where: {
-                loan_application_id: app.id,
-                lender_rate_id: rateObj.id
-              }
-            });
+            // 2. Find or create the chosen lender_application with status 'active'
+            const [existingRows] = await sequelize.query(
+              `SELECT id FROM lender_applications WHERE loan_application_id = :appId AND lender_rate_id = :rateId LIMIT 1`,
+              { replacements: { appId: app.id, rateId: rateObj.id } }
+            );
 
-            if (existingLap) {
-              existingLap.status = 'active';
-              await existingLap.save();
+            if (existingRows && existingRows.length > 0) {
+              await sequelize.query(
+                `UPDATE lender_applications SET status = 'active', updatedAt = NOW() WHERE id = :id`,
+                { replacements: { id: existingRows[0].id } }
+              );
             } else {
-              await Lender_Application.create({
-                loan_application_id: app.id,
-                lender_rate_id: rateObj.id,
-                status: 'active'
-              });
+              await sequelize.query(
+                `INSERT INTO lender_applications (loan_application_id, lender_rate_id, status, createdAt, updatedAt) VALUES (:appId, :rateId, 'active', NOW(), NOW())`,
+                { replacements: { appId: app.id, rateId: rateObj.id } }
+              );
             }
           }
         }
