@@ -305,9 +305,11 @@ export const referClient = async (req, res) => {
     if (clientPref === 'direct_reach' && isNewUser && email) {
       const defaultPassword = "Pass@1234";
       waCredentials = { username: email, password: defaultPassword };
-      // Send welcome email with login credentials
+      // Send welcome email with login credentials + referral/loan details
       try {
-        await sendWelcomeEmail(email, name, defaultPassword);
+        const partnerUser = partner ? await User.findByPk(partner.user_id) : null;
+        const partnerName = partnerUser ? partnerUser.name : 'your partner';
+        await sendWelcomeEmail(email, name, defaultPassword, partnerName, loanType?.name || loanType, loan_amount);
         console.log(`✅ Welcome email dispatched to ${email}`);
       } catch (emailErr) {
         // Non-fatal — log and continue; application is already created
