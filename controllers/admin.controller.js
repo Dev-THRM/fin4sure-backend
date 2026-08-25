@@ -1975,3 +1975,39 @@ export const getDashboardBundle = async (req, res) => {
     });
   }
 };
+
+/* -----------------------------------------------------
+   ADMIN – DIRECT BANK SCRAPER CONTROLLERS
+----------------------------------------------------- */
+export const triggerBankScraper = async (req, res) => {
+  try {
+    const { executeScraperJob } = await import("../services/scraperScheduler.service.js");
+    const result = await executeScraperJob();
+    res.json(result);
+  } catch (err) {
+    console.error("triggerBankScraper error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const getScraperStatusController = async (req, res) => {
+  try {
+    const { getScraperState } = await import("../services/scraperScheduler.service.js");
+    res.json(getScraperState());
+  } catch (err) {
+    console.error("getScraperStatusController error:", err);
+    res.status(500).json({ message: "Failed to get scraper status" });
+  }
+};
+
+export const updateScraperScheduleController = async (req, res) => {
+  try {
+    const { day } = req.body;
+    const { updateScraperDay } = await import("../services/scraperScheduler.service.js");
+    const state = updateScraperDay(day || "Monday");
+    res.json({ success: true, state });
+  } catch (err) {
+    console.error("updateScraperScheduleController error:", err);
+    res.status(400).json({ success: false, message: err.message });
+  }
+};
