@@ -178,7 +178,7 @@ export const VerifyEmailOTP = async (req, res) => {
  */
 export const OTPLoginHandler = async (req, res) => {
   try {
-    const { email, otp } = req.body;
+    const { email, otp, role: requestedRole } = req.body;
     if (!email || !otp) {
       return res.status(400).json({ message: 'Email and OTP are required.' });
     }
@@ -188,6 +188,10 @@ export const OTPLoginHandler = async (req, res) => {
     let role = 'borrower';
     if (user.role_id === 2) role = 'partner';
     if (user.role_id === 3) role = 'admin';
+
+    if (requestedRole && requestedRole !== role && role !== 'admin') {
+      return res.status(403).json({ message: `there is no ${requestedRole} registered with this email` });
+    }
 
     return res
       .cookie('AccessToken', accessToken, {
@@ -229,7 +233,7 @@ export const verifyOTP = async (req, res) => {
 
 export const loginHandler = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role: requestedRole } = req.body;
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password required" });
     }
@@ -240,6 +244,10 @@ export const loginHandler = async (req, res) => {
     let role = "borrower";
     if (user.role_id === 2) role = "partner";
     if (user.role_id === 3) role = "admin";
+
+    if (requestedRole && requestedRole !== role && role !== "admin") {
+      return res.status(403).json({ message: `there is no ${requestedRole} registered with this email` });
+    }
 
     return res
       .cookie("AccessToken", accessToken, {
