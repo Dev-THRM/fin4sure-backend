@@ -12,6 +12,7 @@ import State from "../models/state.js";
 import bcrypt from "bcrypt";
 import { Op } from "sequelize";
 import axios from "axios";
+import { sendWelcomeEmail } from "../utils/email.js";
 
 // ----------------- GETTING CLIENT DETAILS OF THE PARTNER(INDIVIDUAL) -----------------
 export const getReferredClients = async (req, res) => {
@@ -171,10 +172,14 @@ export const referClient = async (req, res) => {
 
     let borrowerId = null;
 
+    // Track if this is a brand-new user so we know whether to send the welcome email
+    let isNewUser = false;
+
     if (!clientUser) {
-      // Create new user profile with dummy password
+      isNewUser = true;
+      // Create new user profile with default password
       const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash("Password@12", salt);
+      const hashedPassword = await bcrypt.hash("Pass@1234", salt);
 
       clientUser = await User.create({
         name: name,
@@ -297,36 +302,34 @@ export const referClient = async (req, res) => {
     });
 
     let waCredentials = null;
-    if (clientPref === 'direct_reach') {
-      waCredentials = { username: email, password: "Password@12" };
-      console.log(`[WHATSAPP SIMULATION] Message to 91${number}`);
-      console.log(`Your Fin4Sure account has been created.\nUsername: ${email}\nPassword: Password@12\n\nPlease log in and change your password if you want.`);
-      
-      /*
+    if (clientPref === 'direct_reach' && isNewUser && email) {
+      const defaultPassword = "Pass@1234";
+      waCredentials = { username: email, password: defaultPassword };
+      // Send welcome email with login credentials
       try {
-        const whatsapp_url = `https://graph.facebook.com/v20.0/${process.env.MOBILE_ID}/messages`;
-        
-        await axios.post(
-          whatsapp_url,
-          {
-            messaging_product: "whatsapp",
-            to: `91${number}`,
-            type: "text", // using standard text structure (or switch to template if required by FB API)
-            text: {
-              body: `Your Fin4Sure account has been created.\n\nUsername: ${email}\nPassword: Password@12\n\nPlease log in and change your password if you want.`
-            }
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.TOKENS}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
-      } catch (waError) {
-        console.error("WhatsApp message failed to send:", waError?.response?.data || waError.message);
+        await sendWelcomeEmail(email, name, defaultPassword);
+        console.log(`✅ Welcome email dispatched to ${email}`);
+      } catch (emailErr) {
+        // Non-fatal — log and continue; application is already created
+        console.error(`⚠️ Welcome email failed for ${email}:`, emailErr.message);
       }
-      */
+
+      // --- OLD WhatsApp simulation (commented out) ---
+      // console.log(`[WHATSAPP SIMULATION] Message to 91${number}`);
+      // console.log(`Your Fin4Sure account has been created.\nUsername: ${email}\nPassword: Password@12`);
+      //
+      // try {
+      //   const whatsapp_url = `https://graph.facebook.com/v20.0/${process.env.MOBILE_ID}/messages`;
+      //   await axios.post(whatsapp_url, {
+      //     messaging_product: "whatsapp",
+      //     to: `91${number}`,
+      //     type: "text",
+      //     text: { body: `Your Fin4Sure account has been created.\n\nUsername: ${email}\nPassword: Password@12` }
+      //   }, { headers: { Authorization: `Bearer ${process.env.TOKENS}`, "Content-Type": "application/json" } });
+      // } catch (waError) {
+      //   console.error("WhatsApp message failed:", waError?.response?.data || waError.message);
+      // }
+      // --- END old WhatsApp simulation ---
     }
 
     return res.status(201).json({
