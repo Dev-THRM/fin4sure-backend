@@ -12,6 +12,7 @@ import { DataTypes } from "sequelize";
 import User from "../models/user.js";
 import Lender from "../models/lender.js";
 import LenderLoanRates from "../models/lender_loan_rates.js";
+import Lender_Application from "../models/lender_application.js";
 import LoanType from "../models/loan_type.js";
 import PlatformSetting from "../models/platform_settings.model.js";
 import Borrower from "../models/borrower.js";
@@ -479,24 +480,30 @@ export const allLeads = async (req, res) => {
       ORDER BY la.createdAt DESC
     `);
 
-    // Fetch all lender applications for multiple lenders per loan
-    const appLendersMap = new Map();
+    // Fetch all lender applications for multiple lenders per loan, tracking active vs pending/inactive status
+    const appActiveLenderMap = new Map();
+    const appAllLendersMap = new Map();
     try {
       const [lenderApps] = await sequelize.query(`
         SELECT 
           lap.loan_application_id,
+          lap.status AS lap_status,
           COALESCE(l.name, l.short) AS lender_name
         FROM lender_applications lap
         LEFT JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
         LEFT JOIN lenders l ON l.id = llr.lender_id
         WHERE l.name IS NOT NULL
+        ORDER BY lap.id ASC
       `);
       lenderApps.forEach(row => {
-        if (!appLendersMap.has(row.loan_application_id)) {
-          appLendersMap.set(row.loan_application_id, []);
+        if (!appAllLendersMap.has(row.loan_application_id)) {
+          appAllLendersMap.set(row.loan_application_id, []);
         }
-        if (!appLendersMap.get(row.loan_application_id).includes(row.lender_name)) {
-          appLendersMap.get(row.loan_application_id).push(row.lender_name);
+        if (!appAllLendersMap.get(row.loan_application_id).includes(row.lender_name)) {
+          appAllLendersMap.get(row.loan_application_id).push(row.lender_name);
+        }
+        if (row.lap_status === 'active') {
+          appActiveLenderMap.set(row.loan_application_id, row.lender_name);
         }
       });
     } catch (_) {}
@@ -541,12 +548,15 @@ export const allLeads = async (req, res) => {
         ? (String(app.application_no).startsWith('F4S') ? app.application_no : `F4S-${app.application_no}`)
         : `F4S-${2000 + app.id}`;
 
-      // Resolve comma-separated multi-lenders
-      let resolvedLenderNames = appLendersMap.get(app.id) || [];
-      if (resolvedLenderNames.length === 0 && app.direct_lender_name) {
+      // Resolve assigned lender: active lender takes priority; otherwise candidate lenders list
+      let resolvedLenderNames = [];
+      if (appActiveLenderMap.has(app.id)) {
+        resolvedLenderNames = [appActiveLenderMap.get(app.id)];
+      } else if (appAllLendersMap.has(app.id) && appAllLendersMap.get(app.id).length > 0) {
+        resolvedLenderNames = appAllLendersMap.get(app.id);
+      } else if (app.direct_lender_name) {
         resolvedLenderNames = [app.direct_lender_name];
-      }
-      if (resolvedLenderNames.length === 0 && app.client_preference && app.client_preference !== 'direct_reach' && app.client_preference !== 'partner_routing') {
+      } else if (app.client_preference && app.client_preference !== 'direct_reach' && app.client_preference !== 'partner_routing') {
         resolvedLenderNames = app.client_preference.split(',').map(s => s.trim()).filter(Boolean);
       }
       if (resolvedLenderNames.length === 0) {
@@ -576,6 +586,8 @@ export const allLeads = async (req, res) => {
         stage: rawStatus,
         lender: lenderString,
         lenders: resolvedLenderNames,
+        all_selected_lenders: appAllLendersMap.get(app.id) || resolvedLenderNames,
+        active_lender: appActiveLenderMap.get(app.id) || null,
         source: app.partner_name || "Direct",
         client_preference: app.client_preference,
         partner_id: app.partner_id,
@@ -723,41 +735,84 @@ export const updateApplication = async (req, res) => {
       }
     }
 
-    // 2. Resolve lender_id from lender name if provided
+    // 2. Resolve lender_id from lender name and update lender_applications active/inactive status
     let lender_id = app.lender_id;
     let finalLenderName = lender || "SBI";
 
-    if (lender) {
+    if (lender && typeof lender === 'string' && lender.trim()) {
       try {
+        const cleanLenderName = lender.trim();
         let matchedLender = await Lender.findOne({
           where: {
             [Op.or]: [
-              { name: lender },
-              { short: lender }
+              { name: cleanLenderName },
+              { short: cleanLenderName }
             ]
-          },
-          raw: true
+          }
         });
 
         if (!matchedLender) {
-          const allLenders = await Lender.findAll({ raw: true });
+          const allLenders = await Lender.findAll();
           matchedLender = allLenders.find(l => 
-            (l.name && l.name.toLowerCase().includes(lender.toLowerCase())) ||
-            (l.short && l.short.toLowerCase().includes(lender.toLowerCase()))
+            (l.name && l.name.toLowerCase().trim() === cleanLenderName.toLowerCase()) ||
+            (l.short && l.short.toLowerCase().trim() === cleanLenderName.toLowerCase()) ||
+            (l.name && l.name.toLowerCase().includes(cleanLenderName.toLowerCase())) ||
+            (l.short && l.short.toLowerCase().includes(cleanLenderName.toLowerCase()))
           );
         }
 
         if (!matchedLender) {
           matchedLender = await Lender.create({
-            name: lender,
-            short: lender,
-            type: "Bank"
+            name: cleanLenderName,
+            short: cleanLenderName,
+            type: "private"
           });
         }
 
         if (matchedLender) {
           lender_id = matchedLender.id;
-          finalLenderName = matchedLender.name || matchedLender.short || lender;
+          finalLenderName = matchedLender.name || matchedLender.short || cleanLenderName;
+
+          // Find or create the LenderLoanRates for this lender and loan_type
+          const targetLoanTypeId = app.loan_type_id || 1;
+          const [rateObj] = await LenderLoanRates.findOrCreate({
+            where: {
+              lender_id: matchedLender.id,
+              loan_type_id: targetLoanTypeId
+            },
+            defaults: {
+              rate_type: 'floating',
+              min_rate: 8.5,
+              max_rate: 14.5
+            }
+          });
+
+          if (rateObj) {
+            // Set all existing lender_applications for this loan to 'inactive'
+            await Lender_Application.update(
+              { status: 'inactive' },
+              { where: { loan_application_id: app.id } }
+            );
+
+            // Find or create the chosen lender_application with status 'active'
+            const existingLap = await Lender_Application.findOne({
+              where: {
+                loan_application_id: app.id,
+                lender_rate_id: rateObj.id
+              }
+            });
+
+            if (existingLap) {
+              existingLap.status = 'active';
+              await existingLap.save();
+            } else {
+              await Lender_Application.create({
+                loan_application_id: app.id,
+                lender_rate_id: rateObj.id,
+                status: 'active'
+              });
+            }
+          }
         }
       } catch (err) {
         console.error("Lender resolution error:", err);
