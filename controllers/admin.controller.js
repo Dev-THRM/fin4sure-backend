@@ -12,6 +12,7 @@ import { DataTypes } from "sequelize";
 import User from "../models/user.js";
 import Lender from "../models/lender.js";
 import LenderLoanRates from "../models/lender_loan_rates.js";
+import Lender_Application from "../models/lender_application.js";
 import LoanType from "../models/loan_type.js";
 import PlatformSetting from "../models/platform_settings.model.js";
 import Borrower from "../models/borrower.js";
@@ -479,24 +480,34 @@ export const allLeads = async (req, res) => {
       ORDER BY la.createdAt DESC
     `);
 
-    // Fetch all lender applications for multiple lenders per loan
-    const appLendersMap = new Map();
+    // Fetch all lender applications for multiple lenders per loan, tracking active vs pending/inactive status
+    const appActiveLenderMap = new Map();
+    const appPendingLendersMap = new Map();
     try {
       const [lenderApps] = await sequelize.query(`
         SELECT 
           lap.loan_application_id,
+          lap.status AS lap_status,
           COALESCE(l.name, l.short) AS lender_name
         FROM lender_applications lap
         LEFT JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
         LEFT JOIN lenders l ON l.id = llr.lender_id
         WHERE l.name IS NOT NULL
+        ORDER BY lap.id ASC
       `);
       lenderApps.forEach(row => {
-        if (!appLendersMap.has(row.loan_application_id)) {
-          appLendersMap.set(row.loan_application_id, []);
-        }
-        if (!appLendersMap.get(row.loan_application_id).includes(row.lender_name)) {
-          appLendersMap.get(row.loan_application_id).push(row.lender_name);
+        const idKey = String(row.loan_application_id);
+        const st = String(row.lap_status || '').toLowerCase().trim();
+
+        if (st === 'active') {
+          appActiveLenderMap.set(idKey, row.lender_name);
+        } else if (st === 'pending') {
+          if (!appPendingLendersMap.has(idKey)) {
+            appPendingLendersMap.set(idKey, []);
+          }
+          if (!appPendingLendersMap.get(idKey).includes(row.lender_name)) {
+            appPendingLendersMap.get(idKey).push(row.lender_name);
+          }
         }
       });
     } catch (_) {}
@@ -541,12 +552,17 @@ export const allLeads = async (req, res) => {
         ? (String(app.application_no).startsWith('F4S') ? app.application_no : `F4S-${app.application_no}`)
         : `F4S-${2000 + app.id}`;
 
-      // Resolve comma-separated multi-lenders
-      let resolvedLenderNames = appLendersMap.get(app.id) || [];
-      if (resolvedLenderNames.length === 0 && app.direct_lender_name) {
+      const appIdKey = String(app.id);
+
+      // Resolve assigned lender: active lender takes priority; otherwise pending candidate lenders list
+      let resolvedLenderNames = [];
+      if (appActiveLenderMap.has(appIdKey)) {
+        resolvedLenderNames = [appActiveLenderMap.get(appIdKey)];
+      } else if (app.direct_lender_name) {
         resolvedLenderNames = [app.direct_lender_name];
-      }
-      if (resolvedLenderNames.length === 0 && app.client_preference && app.client_preference !== 'direct_reach' && app.client_preference !== 'partner_routing') {
+      } else if (appPendingLendersMap.has(appIdKey) && appPendingLendersMap.get(appIdKey).length > 0) {
+        resolvedLenderNames = appPendingLendersMap.get(appIdKey);
+      } else if (app.client_preference && app.client_preference !== 'direct_reach' && app.client_preference !== 'partner_routing') {
         resolvedLenderNames = app.client_preference.split(',').map(s => s.trim()).filter(Boolean);
       }
       if (resolvedLenderNames.length === 0) {
@@ -576,6 +592,8 @@ export const allLeads = async (req, res) => {
         stage: rawStatus,
         lender: lenderString,
         lenders: resolvedLenderNames,
+        all_selected_lenders: appPendingLendersMap.get(appIdKey) || resolvedLenderNames,
+        active_lender: appActiveLenderMap.get(appIdKey) || app.direct_lender_name || null,
         source: app.partner_name || "Direct",
         client_preference: app.client_preference,
         partner_id: app.partner_id,
@@ -723,41 +741,83 @@ export const updateApplication = async (req, res) => {
       }
     }
 
-    // 2. Resolve lender_id from lender name if provided
+    // 2. Resolve lender_id from lender name and update lender_applications active/inactive status
     let lender_id = app.lender_id;
     let finalLenderName = lender || "SBI";
 
-    if (lender) {
+    if (lender && typeof lender === 'string' && lender.trim()) {
       try {
+        const cleanLenderName = lender.trim();
         let matchedLender = await Lender.findOne({
           where: {
             [Op.or]: [
-              { name: lender },
-              { short: lender }
+              { name: cleanLenderName },
+              { short: cleanLenderName }
             ]
-          },
-          raw: true
+          }
         });
 
         if (!matchedLender) {
-          const allLenders = await Lender.findAll({ raw: true });
+          const allLenders = await Lender.findAll();
           matchedLender = allLenders.find(l => 
-            (l.name && l.name.toLowerCase().includes(lender.toLowerCase())) ||
-            (l.short && l.short.toLowerCase().includes(lender.toLowerCase()))
+            (l.name && l.name.toLowerCase().trim() === cleanLenderName.toLowerCase()) ||
+            (l.short && l.short.toLowerCase().trim() === cleanLenderName.toLowerCase()) ||
+            (l.name && l.name.toLowerCase().includes(cleanLenderName.toLowerCase())) ||
+            (l.short && l.short.toLowerCase().includes(cleanLenderName.toLowerCase()))
           );
         }
 
         if (!matchedLender) {
           matchedLender = await Lender.create({
-            name: lender,
-            short: lender,
-            type: "Bank"
+            name: cleanLenderName,
+            short: cleanLenderName,
+            type: "private"
           });
         }
 
         if (matchedLender) {
           lender_id = matchedLender.id;
-          finalLenderName = matchedLender.name || matchedLender.short || lender;
+          finalLenderName = matchedLender.name || matchedLender.short || cleanLenderName;
+
+          // Find or create the LenderLoanRates for this lender and loan_type
+          const targetLoanTypeId = app.loan_type_id || 1;
+          const [rateObj] = await LenderLoanRates.findOrCreate({
+            where: {
+              lender_id: matchedLender.id,
+              loan_type_id: targetLoanTypeId
+            },
+            defaults: {
+              rate_type: 'floating',
+              min_rate: 8.5,
+              max_rate: 14.5
+            }
+          });
+
+          if (rateObj) {
+            // 1. Set all existing lender_applications for this loan to 'inactive'
+            await sequelize.query(
+              `UPDATE lender_applications SET status = 'inactive', updatedAt = NOW() WHERE loan_application_id = :appId`,
+              { replacements: { appId: app.id } }
+            );
+
+            // 2. Find or create the chosen lender_application with status 'active'
+            const [existingRows] = await sequelize.query(
+              `SELECT id FROM lender_applications WHERE loan_application_id = :appId AND lender_rate_id = :rateId LIMIT 1`,
+              { replacements: { appId: app.id, rateId: rateObj.id } }
+            );
+
+            if (existingRows && existingRows.length > 0) {
+              await sequelize.query(
+                `UPDATE lender_applications SET status = 'active', updatedAt = NOW() WHERE id = :id`,
+                { replacements: { id: existingRows[0].id } }
+              );
+            } else {
+              await sequelize.query(
+                `INSERT INTO lender_applications (loan_application_id, lender_rate_id, status, createdAt, updatedAt) VALUES (:appId, :rateId, 'active', NOW(), NOW())`,
+                { replacements: { appId: app.id, rateId: rateObj.id } }
+              );
+            }
+          }
         }
       } catch (err) {
         console.error("Lender resolution error:", err);
@@ -1763,25 +1823,43 @@ export const getDashboardBundle = async (req, res) => {
         }
 
         let resolvedLenderNames = [];
+        let activeLenderName = null;
+        let pendingLenderNames = [];
+
         try {
           const [lenderRows] = await sequelize.query(`
-            SELECT DISTINCT COALESCE(l.name, l.short) AS lender_name
+            SELECT 
+              lap.status AS lap_status,
+              COALESCE(l.name, l.short) AS lender_name
             FROM lender_applications lap
             LEFT JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
             LEFT JOIN lenders l ON l.id = llr.lender_id
             WHERE lap.loan_application_id = ${sequelize.escape(app.id)} AND l.name IS NOT NULL
+            ORDER BY lap.id ASC
           `);
-          resolvedLenderNames = lenderRows.map(r => r.lender_name).filter(Boolean);
+
+          lenderRows.forEach(r => {
+            const st = String(r.lap_status || '').toLowerCase().trim();
+            if (st === 'active') {
+              activeLenderName = r.lender_name;
+            } else if (st === 'pending') {
+              if (!pendingLenderNames.includes(r.lender_name)) {
+                pendingLenderNames.push(r.lender_name);
+              }
+            }
+          });
         } catch (_) {}
 
-        if (resolvedLenderNames.length === 0 && app.lender_id) {
+        if (activeLenderName) {
+          resolvedLenderNames = [activeLenderName];
+        } else if (app.lender_id) {
           try {
             const lObj = await Lender.findByPk(app.lender_id, { raw: true });
-            if (lObj) resolvedLenderNames.push(lObj.name || lObj.short);
+            if (lObj) resolvedLenderNames = [lObj.name || lObj.short];
           } catch (_) {}
-        }
-
-        if (resolvedLenderNames.length === 0 && app.client_preference && app.client_preference !== 'direct_reach' && app.client_preference !== 'partner_routing') {
+        } else if (pendingLenderNames.length > 0) {
+          resolvedLenderNames = pendingLenderNames;
+        } else if (app.client_preference && app.client_preference !== 'direct_reach' && app.client_preference !== 'partner_routing') {
           resolvedLenderNames = app.client_preference.split(',').map(s => s.trim()).filter(Boolean);
         }
 
@@ -1828,6 +1906,8 @@ export const getDashboardBundle = async (req, res) => {
           stage: stageName,
           lender: lenderName,
           lenders: resolvedLenderNames,
+          all_selected_lenders: pendingLenderNames.length > 0 ? pendingLenderNames : resolvedLenderNames,
+          active_lender: activeLenderName || (app.lender_id ? resolvedLenderNames[0] : null),
           source: partnerName ? partnerName : "Direct",
           client_preference: app.client_preference,
           partner_id: app.partner_id,
