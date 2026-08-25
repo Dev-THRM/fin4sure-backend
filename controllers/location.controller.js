@@ -32,6 +32,37 @@ export const getCities = async (req, res) => {
   }
 };
 
+export const getAllCities = async (req, res) => {
+  try {
+    const cities = await City.findAll({
+      attributes: ['id', 'name'],
+      order: [['name', 'ASC']],
+      raw: true
+    });
+    const uniqueCityNames = Array.from(new Set(cities.map(c => c.name).filter(Boolean)));
+    return res.status(200).json({ success: true, data: uniqueCityNames });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const createOrGetCity = async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: "City name required" });
+    }
+    const cleanName = name.trim();
+    const [cityObj, created] = await City.findOrCreate({
+      where: { name: cleanName },
+      defaults: { name: cleanName, district_id: 1 }
+    });
+    return res.status(200).json({ success: true, city: cityObj, created });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const getLocationByPincode = async (req, res) => {
   try {
     const { pincode } = req.params;
