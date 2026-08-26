@@ -100,16 +100,14 @@ export const applyLoan = async (req, res) => {
     if (selectedLenders && Array.isArray(selectedLenders) && selectedLenders.length > 0) {
       for (const lenderId of selectedLenders) {
         try {
-          let rateObj = await Lender_Loan_Rates.findOne({
+          let [rateObj] = await Lender_Loan_Rates.findOrCreate({
             where: { lender_id: lenderId, loan_type_id: loanTypeId },
-            raw: true
+            defaults: {
+              rate_type: 'floating',
+              min_rate: 8.5,
+              max_rate: 14.5
+            }
           });
-          if (!rateObj) {
-            rateObj = await Lender_Loan_Rates.findOne({
-              where: { lender_id: lenderId },
-              raw: true
-            });
-          }
           if (rateObj) {
             await Lender_Application.create({
               loan_application_id: newLoanApp.id,
