@@ -558,10 +558,10 @@ export const allLeads = async (req, res) => {
       let resolvedLenderNames = [];
       if (appActiveLenderMap.has(appIdKey)) {
         resolvedLenderNames = [appActiveLenderMap.get(appIdKey)];
-      } else if (app.direct_lender_name) {
-        resolvedLenderNames = [app.direct_lender_name];
       } else if (appPendingLendersMap.has(appIdKey) && appPendingLendersMap.get(appIdKey).length > 0) {
         resolvedLenderNames = appPendingLendersMap.get(appIdKey);
+      } else if (app.direct_lender_name) {
+        resolvedLenderNames = [app.direct_lender_name];
       } else if (app.client_preference && app.client_preference !== 'direct_reach' && app.client_preference !== 'partner_routing') {
         resolvedLenderNames = app.client_preference.split(',').map(s => s.trim()).filter(Boolean);
       }
