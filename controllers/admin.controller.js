@@ -2511,8 +2511,31 @@ export const updateScraperScheduleController = async (req, res) => {
 export const getApplicationDocuments = async (req, res) => {
   try {
     const { id } = req.params;
+    const { Op } = await import("sequelize");
+    const cleanAppNo = String(id).replace(/^F4S-?/i, '').trim();
+
+    let targetAppId = id;
+    const app = await Loan_Application.findOne({
+      where: {
+        [Op.or]: [
+          { id: isNaN(id) ? -1 : Number(id) },
+          { application_no: cleanAppNo }
+        ]
+      },
+      raw: true
+    });
+
+    if (app) {
+      targetAppId = app.id;
+    }
+
     const documents = await Document.findAll({
-      where: { loan_application_id: id },
+      where: {
+        [Op.or]: [
+          { loan_application_id: targetAppId },
+          ...(app ? [{ loan_application_id: app.application_no }] : [])
+        ]
+      },
       raw: true
     });
     res.json(documents);
