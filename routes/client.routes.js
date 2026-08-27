@@ -13,7 +13,6 @@ import { verifyUser, isClient, isClientOrBroker } from "../middlewares/auth.midd
 
 const router = express.Router();
 import fs from 'fs';
-import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
