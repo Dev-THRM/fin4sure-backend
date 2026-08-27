@@ -201,8 +201,11 @@ export const OTPLoginHandler = async (req, res) => {
         accessToken,
         user: {
           _id: user.id,
+          id: user.id,
           name: user.name,
           email: user.email,
+          number: user.mob_no || user.number,
+          mob_no: user.mob_no || user.number,
           role,
         },
       });
@@ -250,8 +253,11 @@ export const loginHandler = async (req, res) => {
       })
       .json({
         _id: user.id,
+        id: user.id,
         name: user.name,
         email: user.email,
+        number: user.mob_no || user.number,
+        mob_no: user.mob_no || user.number,
         role,
         accessToken,
       });
