@@ -3,6 +3,7 @@ import District from "../models/district.js";
 import City from "../models/city.js";
 import Pincode from "../models/pincode.js";
 import PlatformSetting from "../models/platform_settings.model.js";
+import RelationshipManager from "../models/relationship_manager.model.js";
 
 export const getStates = async (req, res) => {
   try {
@@ -108,6 +109,11 @@ export const getPublicSettings = async (req, res) => {
       settings = await PlatformSetting.findAll({ raw: true });
     } catch (_) {}
 
+    let rm = null;
+    try {
+      rm = await RelationshipManager.findOne({ raw: true });
+    } catch (_) {}
+
     const settingsObj = {};
     if (Array.isArray(settings)) {
       settings.forEach(s => {
@@ -117,16 +123,21 @@ export const getPublicSettings = async (req, res) => {
       });
     }
 
+    const phoneVal = (rm && rm.mob) ? rm.mob : (settingsObj.support_phone || "1800-123-4567");
+
     return res.status(200).json({
       success: true,
       announcement_banner: settingsObj.announcement_banner || "",
-      roi_disclaimer: settingsObj.roi_disclaimer || ""
+      roi_disclaimer: settingsObj.roi_disclaimer || "",
+      support_phone: phoneVal,
+      rm_details: rm || null
     });
   } catch (error) {
     return res.status(200).json({
       success: true,
       announcement_banner: "",
-      roi_disclaimer: ""
+      roi_disclaimer: "",
+      support_phone: "1800-123-4567"
     });
   }
 };

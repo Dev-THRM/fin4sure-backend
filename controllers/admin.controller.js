@@ -1487,6 +1487,13 @@ export const updateRelationshipManager = async (req, res) => {
     } else {
       await rm.update({ name, role, mob, email, availability });
     }
+
+    try {
+      if (mob) {
+        await PlatformSetting.upsert({ key: "support_phone", value: mob });
+      }
+    } catch (_) {}
+
     res.json(rm);
   } catch (err) {
     console.error("Update RM error:", err);
