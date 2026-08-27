@@ -722,6 +722,20 @@ export const allLeads = async (req, res) => {
 export const updateBrokerStatus = async (req, res) => {
   try {
     const { brokerId, status } = req.body;
+    if (!brokerId) {
+      return res.status(400).json({ success: false, message: "Broker ID required" });
+    }
+
+    let cleanId = brokerId;
+    if (typeof brokerId === 'string') {
+      const match = brokerId.match(/\d+/);
+      if (match) cleanId = match[0];
+    }
+    const targetId = parseInt(cleanId, 10);
+    if (isNaN(targetId)) {
+      return res.status(400).json({ success: false, message: "Invalid broker ID" });
+    }
+
     let userStatus = (status || "").toLowerCase().trim();
     if (userStatus === "approved") userStatus = "active";
     if (userStatus === "rejected") userStatus = "inactive";
@@ -729,20 +743,22 @@ export const updateBrokerStatus = async (req, res) => {
       userStatus = "active";
     }
 
-    await User.update(
-      { status: userStatus },
-      { where: { id: Number(brokerId) } }
-    );
-
-    const user = await User.findByPk(Number(brokerId), {
-      attributes: ['id', 'name', 'email', 'mob_no', 'status']
-    });
-
+    let user = await User.findByPk(targetId);
     if (!user) {
-      return res.status(404).json({ message: "Broker not found" });
+      const partner = await Partner.findByPk(targetId);
+      if (partner && partner.user_id) {
+        user = await User.findByPk(partner.user_id);
+      }
     }
 
-    res.json({
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Broker not found" });
+    }
+
+    await user.update({ status: userStatus });
+
+    return res.status(200).json({
+      success: true,
       brokerId: String(user.id),
       name: user.name,
       email: user.email,
@@ -751,7 +767,7 @@ export const updateBrokerStatus = async (req, res) => {
     });
   } catch (err) {
     console.error("Update broker status error:", err);
-    res.status(500).json({ message: "Failed to update broker status" });
+    return res.status(500).json({ success: false, message: "Failed to update broker status", error: err.message });
   }
 };
 
