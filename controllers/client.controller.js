@@ -194,7 +194,7 @@ export const uploadDocs = async (req, res) => {
     }
   } catch (err) {
     console.error("Upload docs error:", err);
-    return res.status(500).json({ message: "Server error during document upload" });
+    return res.status(500).json({ message: "Server error during document upload", error: err.message, stack: err.stack });
   }
 };
 
