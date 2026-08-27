@@ -55,7 +55,19 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-// Serve uploaded files statically
+// Serve uploaded files statically across all potential locations (persistent + build versions)
+import { findFileInAllUploadLocations, getUploadsDir } from "./utils/uploadHelper.js";
+
+app.get("/uploads/:filename", (req, res) => {
+  const filename = req.params.filename;
+  const filePath = findFileInAllUploadLocations(filename);
+  if (filePath) {
+    return res.sendFile(filePath);
+  }
+  return res.status(404).send("File not found");
+});
+
+app.use("/uploads", express.static(getUploadsDir()));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Routes

@@ -14,26 +14,15 @@ import { verifyUser, isClient, isClientOrBroker } from "../middlewares/auth.midd
 const router = express.Router();
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { getUploadsDir } from '../utils/uploadHelper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const UPLOADS_DIR = path.resolve(__dirname, '../uploads');
-
-// -------------------- Client routes --------------------
-
-// Ensure uploads directory exists
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    if (!fs.existsSync(UPLOADS_DIR)) {
-      try {
-        fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-      } catch (err) {}
-    }
-    cb(null, UPLOADS_DIR);
+    const uploadDir = getUploadsDir();
+    cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
