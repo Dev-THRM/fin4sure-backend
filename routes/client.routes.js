@@ -28,6 +28,11 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      try {
+        fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+      } catch (err) {}
+    }
     cb(null, UPLOADS_DIR);
   },
   filename: function (req, file, cb) {

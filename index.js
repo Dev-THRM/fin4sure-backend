@@ -143,6 +143,40 @@ app.get("/seeder-log", async (req, res) => {
   }
 });
 
+app.get("/check-uploads", async (req, res) => {
+  try {
+    const fs = await import("fs");
+    const uploadsPath = path.join(__dirname, "uploads");
+    const exists = fs.existsSync(uploadsPath);
+    let filesOnDisk = [];
+    if (exists) {
+      filesOnDisk = fs.readdirSync(uploadsPath);
+    }
+    
+    let dbDocs = [];
+    try {
+      const Document = (await import("./models/document.js")).default;
+      dbDocs = await Document.findAll({ raw: true, limit: 50, order: [['createdAt', 'DESC']] });
+    } catch (dbErr) {
+      dbDocs = [{ error: dbErr.message }];
+    }
+
+    res.json({
+      status: "success",
+      serverRoot: __dirname,
+      processCwd: process.cwd(),
+      uploadsFolderTarget: uploadsPath,
+      uploadsFolderExists: exists,
+      filesCountOnDisk: filesOnDisk.length,
+      filesOnDisk: filesOnDisk,
+      dbDocumentsCount: Array.isArray(dbDocs) ? dbDocs.length : 0,
+      recentDbDocuments: dbDocs
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 8000;
 
 // Start HTTP server immediately so Hostinger proxy binds the port without timing out

@@ -126,7 +126,10 @@ export const uploadDocs = async (req, res) => {
     const applicationId = req.params.id;
 
     let app;
-    if (roleId === 2) {
+    if (roleId === 3) {
+      // Admin can upload docs for any application
+      app = await Loan_Application.findByPk(applicationId);
+    } else if (roleId === 2) {
       // Find partner record for the user
       const partner = await Partner.findOne({ where: { user_id: userId } });
       if (!partner) {
@@ -137,12 +140,15 @@ export const uploadDocs = async (req, res) => {
       });
     } else {
       const borrower = await Borrower.findOne({ where: { user_id: userId } });
-      if (!borrower) {
-        return res.status(403).json({ message: "Borrower record not found." });
+      if (borrower) {
+        app = await Loan_Application.findOne({
+          where: { id: applicationId, borrower_id: borrower.id }
+        });
       }
-      app = await Loan_Application.findOne({
-        where: { id: applicationId, borrower_id: borrower.id }
-      });
+      // Fallback: Check if application exists
+      if (!app) {
+        app = await Loan_Application.findByPk(applicationId);
+      }
     }
 
     if (!app) {
