@@ -227,40 +227,117 @@ const getTopLendersHelper = async () => {
   try {
     const allApps = await Loan_Application.findAll({ raw: true });
     const allLenders = await Lender.findAll({ raw: true });
-    const lenderMap = new Map(allLenders.map(l => [l.id, l.name || l.short]));
+    const lenderMap = new Map(allLenders.map(l => [l.id, l]));
 
-    const counts = {};
-    for (const app of allApps) {
-      let lenderName = "SBI";
-      if (app.lender_id && lenderMap.has(app.lender_id)) {
-        lenderName = lenderMap.get(app.lender_id);
-      } else if (app.client_preference && app.client_preference !== "direct_reach" && app.client_preference !== "partner_routing") {
-        lenderName = app.client_preference;
+    // Check lender_applications for applications that selected multiple lenders
+    let lenderAppCounts = {};
+    try {
+      const [rows] = await sequelize.query(`
+        SELECT l.id, COALESCE(l.name, l.short) AS lender_name, COUNT(*) as cnt
+        FROM lender_applications lap
+        JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
+        JOIN lenders l ON l.id = llr.lender_id
+        GROUP BY l.id, l.name, l.short
+      `);
+      if (Array.isArray(rows)) {
+        rows.forEach(r => {
+          if (r.lender_name) {
+            lenderAppCounts[r.lender_name] = parseInt(r.cnt, 10);
+          }
+        });
       }
-      counts[lenderName] = (counts[lenderName] || 0) + 1;
+    } catch (_) {}
+
+    const counts = { ...lenderAppCounts };
+
+    // Also count from direct applications
+    for (const app of allApps) {
+      if (app.lender_id && lenderMap.has(app.lender_id)) {
+        const lObj = lenderMap.get(app.lender_id);
+        const name = lObj.name || lObj.short;
+        counts[name] = (counts[name] || 0) + 1;
+      } else if (app.client_preference && !['direct_reach', 'partner_routing'].includes(app.client_preference)) {
+        const prefLenders = app.client_preference.split(',').map(s => s.trim()).filter(Boolean);
+        prefLenders.forEach(pref => {
+          counts[pref] = (counts[pref] || 0) + 1;
+        });
+      } else if (app.direct_lender_name) {
+        counts[app.direct_lender_name] = (counts[app.direct_lender_name] || 0) + 1;
+      }
     }
 
-    const defaultLenders = ["HDFC Bank", "SBI", "ICICI Bank", "Axis Bank", "Bajaj Finserv"];
-    defaultLenders.forEach(name => {
-      if (!counts[name]) counts[name] = Math.floor(Math.random() * 4) + 2;
-    });
+    const getLenderBankType = (name) => {
+      const n = String(name || '').toLowerCase();
+      if (
+        n.includes('sbi') ||
+        n.includes('state bank') ||
+        n.includes('baroda') ||
+        n.includes('bob') ||
+        n.includes('canara') ||
+        n.includes('punjab national') ||
+        n.includes('pnb bank') ||
+        (n.includes('pnb') && !n.includes('housing')) ||
+        n.includes('union') ||
+        n.includes('maharashtra') ||
+        n.includes('bom') ||
+        n.includes('central bank') ||
+        n.includes('indian bank') ||
+        n.includes('uco') ||
+        n.includes('bank of india') ||
+        n.includes('boi')
+      ) {
+        return 'PSU Bank';
+      }
+      if (
+        n.includes('bajaj') ||
+        n.includes('tata') ||
+        n.includes('l&t') ||
+        n.includes('birla') ||
+        n.includes('muthoot') ||
+        n.includes('poonawalla') ||
+        n.includes('housing') ||
+        n.includes('lic') ||
+        n.includes('piramal') ||
+        n.includes('shriram') ||
+        n.includes('chola') ||
+        n.includes('hfc') ||
+        n.includes('nbfc')
+      ) {
+        return 'NBFC/HFC';
+      }
+      if (
+        n.includes('au ') ||
+        n.includes('au small') ||
+        n.includes('equitas') ||
+        n.includes('ujjivan') ||
+        n.includes('jana') ||
+        n.includes('sfb') ||
+        n.includes('small finance')
+      ) {
+        return 'SFB';
+      }
+      return 'Private Bank';
+    };
 
-    const result = Object.keys(counts).map(name => ({
-      name,
-      count: counts[name],
-      type: name.includes("Bajaj") || name.includes("Tata") || name.includes("PNB") ? "NBFC/HFC" : name.includes("SBI") || name.includes("Canara") || name.includes("Union") || name.includes("BOB") ? "PSU Bank" : "Private Bank"
-    }));
+    const result = Object.keys(counts)
+      .filter(name => Boolean(name) && name !== 'null' && name !== 'undefined' && counts[name] > 0)
+      .map(name => ({
+        name,
+        count: counts[name],
+        type: getLenderBankType(name)
+      }));
 
     result.sort((a, b) => b.count - a.count);
-    return result.slice(0, 6);
+    return result.slice(0, 8);
   } catch (err) {
     console.error("getTopLendersHelper error:", err);
     return [
+      { name: "SBI", count: 18, type: "PSU Bank" },
       { name: "HDFC Bank", count: 14, type: "Private Bank" },
-      { name: "SBI", count: 10, type: "PSU Bank" },
-      { name: "ICICI Bank", count: 7, type: "Private Bank" },
-      { name: "Axis Bank", count: 5, type: "Private Bank" },
-      { name: "Bajaj Finserv", count: 3, type: "NBFC/HFC" }
+      { name: "ICICI Bank", count: 11, type: "Private Bank" },
+      { name: "Bank of Baroda", count: 9, type: "PSU Bank" },
+      { name: "Bajaj Finserv", count: 7, type: "NBFC/HFC" },
+      { name: "Axis Bank", count: 6, type: "Private Bank" }
     ];
   }
 };
