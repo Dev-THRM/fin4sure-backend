@@ -1852,13 +1852,13 @@ export const getDashboardBundle = async (req, res) => {
 
         if (activeLenderName) {
           resolvedLenderNames = [activeLenderName];
+        } else if (pendingLenderNames.length > 0) {
+          resolvedLenderNames = pendingLenderNames;
         } else if (app.lender_id) {
           try {
             const lObj = await Lender.findByPk(app.lender_id, { raw: true });
             if (lObj) resolvedLenderNames = [lObj.name || lObj.short];
           } catch (_) {}
-        } else if (pendingLenderNames.length > 0) {
-          resolvedLenderNames = pendingLenderNames;
         } else if (app.client_preference && app.client_preference !== 'direct_reach' && app.client_preference !== 'partner_routing') {
           resolvedLenderNames = app.client_preference.split(',').map(s => s.trim()).filter(Boolean);
         }
