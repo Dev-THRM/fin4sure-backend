@@ -384,15 +384,35 @@ export const updateBroker = async (req, res) => {
     if (name) updates.name = name;
     if (email) updates.email = email;
     if (mobile) updates.mob_no = mobile;
-    if (status) updates.status = status.toLowerCase();
+    if (status) {
+      let userStatus = String(status).toLowerCase().trim();
+      if (userStatus === "approved") userStatus = "active";
+      if (userStatus === "rejected") userStatus = "inactive";
+      updates.status = userStatus;
+    }
 
-    await user.update(updates);
+    if (Object.keys(updates).length > 0) {
+      await User.update(updates, { where: { id: user.id } });
+    }
 
-    // Update city/address in partners table if provided
-    if (city && partner) {
+    // Update city in partners table if provided
+    if (city && String(city).trim()) {
       try {
-        await partner.update({ address: city });
-      } catch (_) {}
+        const cleanCityName = String(city).trim();
+        let cityRecord = await City.findOne({ where: { name: cleanCityName } });
+        if (!cityRecord) {
+          cityRecord = await City.create({ name: cleanCityName, district_id: 1 });
+        }
+        if (cityRecord) {
+          if (partner) {
+            await partner.update({ city_id: cityRecord.id });
+          } else {
+            await Partner.create({ user_id: user.id, city_id: cityRecord.id });
+          }
+        }
+      } catch (cityErr) {
+        console.warn("Could not update partner city:", cityErr);
+      }
     }
 
     const updatedUser = await User.findByPk(user.id, {
@@ -416,18 +436,32 @@ export const updateBroker = async (req, res) => {
 export const updateBorrower = async (req, res) => {
   try {
     const { id, name, email, mobile, status } = req.body;
-    if (!id) return res.status(400).json({ message: "Borrower user ID required" });
+    if (!id) return res.status(400).json({ success: false, message: "Borrower user ID required" });
 
-    const user = await User.findByPk(id);
-    if (!user) return res.status(404).json({ message: "Borrower not found" });
+    let user = await User.findByPk(Number(id));
+    if (!user) {
+      const borrowerRec = await Borrower.findByPk(Number(id));
+      if (borrowerRec && borrowerRec.user_id) {
+        user = await User.findByPk(borrowerRec.user_id);
+      }
+    }
+
+    if (!user) return res.status(404).json({ success: false, message: "Borrower not found" });
 
     const updates = {};
     if (name) updates.name = name;
     if (email) updates.email = email;
     if (mobile) updates.mob_no = mobile;
-    if (status) updates.status = status;
+    if (status) {
+      let userStatus = String(status).toLowerCase().trim();
+      if (userStatus === "approved") userStatus = "active";
+      if (userStatus === "rejected") userStatus = "inactive";
+      updates.status = userStatus;
+    }
 
-    await user.update(updates);
+    if (Object.keys(updates).length > 0) {
+      await User.update(updates, { where: { id: user.id } });
+    }
 
     // If borrower is rejected or inactive, update all linked loan applications to Rejected
     if (status && ['rejected', 'inactive'].includes(String(status).toLowerCase().trim())) {
@@ -436,8 +470,8 @@ export const updateBorrower = async (req, res) => {
         const rejStatus = await Status.findOne({ where: { name: 'Rejected' }, raw: true });
         if (rejStatus) rejStatusId = rejStatus.id;
 
-        const borrowerObj = await Borrower.findOne({ where: { user_id: id }, raw: true });
-        const borrowerIdsToUpdate = [id];
+        const borrowerObj = await Borrower.findOne({ where: { user_id: user.id }, raw: true });
+        const borrowerIdsToUpdate = [user.id];
         if (borrowerObj) borrowerIdsToUpdate.push(borrowerObj.id);
 
         await Loan_Application.update(
@@ -453,10 +487,18 @@ export const updateBorrower = async (req, res) => {
       }
     }
 
-    res.json({ success: true, message: "Borrower updated successfully" });
+    const updatedUser = await User.findByPk(user.id, {
+      attributes: { exclude: ['password_hash'] }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Borrower updated successfully",
+      data: updatedUser
+    });
   } catch (err) {
     console.error("updateBorrower error:", err);
-    res.status(500).json({ message: "Failed to update borrower" });
+    return res.status(500).json({ success: false, message: "Failed to update borrower", error: err.message });
   }
 };
 
