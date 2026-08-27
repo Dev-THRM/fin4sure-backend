@@ -690,6 +690,132 @@ export const updateBrokerStatus = async (req, res) => {
 };
 
 /* -----------------------------------------------------
+   ADMIN – UPDATE BROKER (PARTNER) DETAILS
+----------------------------------------------------- */
+export const updateBroker = async (req, res) => {
+  try {
+    const { id, name, email, mobile, city, status } = req.body;
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Broker ID is required" });
+    }
+
+    const brokerId = Number(id);
+    let user = await User.findByPk(brokerId);
+
+    // In case id passed was partner.id instead of user.id
+    if (!user) {
+      const partnerRec = await Partner.findByPk(brokerId);
+      if (partnerRec && partnerRec.user_id) {
+        user = await User.findByPk(partnerRec.user_id);
+      }
+    }
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Partner/Broker not found" });
+    }
+
+    const updateFields = {};
+    if (name) updateFields.name = name;
+    if (email) updateFields.email = email;
+    if (mobile) updateFields.mob_no = mobile;
+    if (status) {
+      let userStatus = status.toLowerCase().trim();
+      if (userStatus === "approved") userStatus = "active";
+      if (userStatus === "rejected") userStatus = "inactive";
+      updateFields.status = userStatus;
+    }
+
+    if (Object.keys(updateFields).length > 0) {
+      await User.update(updateFields, { where: { id: user.id } });
+    }
+
+    // Update city if provided in Partner table
+    if (city) {
+      try {
+        let cityRecord = await City.findOne({ where: { name: city } });
+        if (!cityRecord) {
+          cityRecord = await City.create({ name: city });
+        }
+        await Partner.update(
+          { city_id: cityRecord.id },
+          { where: { user_id: user.id } }
+        );
+      } catch (err) {
+        console.warn("Could not update partner city:", err);
+      }
+    }
+
+    const updatedUser = await User.findByPk(user.id, {
+      attributes: { exclude: ['password_hash'] }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Partner updated successfully",
+      data: updatedUser
+    });
+  } catch (err) {
+    console.error("Update broker error:", err);
+    return res.status(500).json({ success: false, message: "Failed to update partner", error: err.message });
+  }
+};
+
+/* -----------------------------------------------------
+   ADMIN – UPDATE BORROWER (CLIENT) DETAILS
+----------------------------------------------------- */
+export const updateBorrower = async (req, res) => {
+  try {
+    const { id, name, email, mobile, status } = req.body;
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Borrower ID is required" });
+    }
+
+    const targetId = Number(id);
+    let user = await User.findByPk(targetId);
+
+    // If ID is borrower.id instead of user.id
+    if (!user) {
+      const borrowerRec = await Borrower.findByPk(targetId);
+      if (borrowerRec && borrowerRec.user_id) {
+        user = await User.findByPk(borrowerRec.user_id);
+      }
+    }
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Borrower/Client not found" });
+    }
+
+    const updateFields = {};
+    if (name) updateFields.name = name;
+    if (email) updateFields.email = email;
+    if (mobile) updateFields.mob_no = mobile;
+    if (status) {
+      let userStatus = status.toLowerCase().trim();
+      if (userStatus === "approved") userStatus = "active";
+      if (userStatus === "rejected") userStatus = "inactive";
+      updateFields.status = userStatus;
+    }
+
+    if (Object.keys(updateFields).length > 0) {
+      await User.update(updateFields, { where: { id: user.id } });
+    }
+
+    const updatedUser = await User.findByPk(user.id, {
+      attributes: { exclude: ['password_hash'] }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Borrower updated successfully",
+      data: updatedUser
+    });
+  } catch (err) {
+    console.error("Update borrower error:", err);
+    return res.status(500).json({ success: false, message: "Failed to update borrower", error: err.message });
+  }
+};
+
+/* -----------------------------------------------------
    ADMIN – UPDATE LEAD STATUS
 ----------------------------------------------------- */
 export const updateLeadStatus = async (req, res) => {
