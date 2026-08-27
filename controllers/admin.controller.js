@@ -3,6 +3,7 @@ import Lead from "../models/lead.model.js";
 import Partner from "../models/partner.model.js";
 import City from "../models/city.js";
 import Loan_Application from "../models/loan_application.js";
+import Document from "../models/document.js";
 import Status from "../models/status.js";
 import Admin from "../models/admin.model.js";
 import RelationshipManager from "../models/relationship_manager.model.js";
