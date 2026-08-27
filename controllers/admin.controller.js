@@ -298,7 +298,7 @@ export const userCount = async (req, res) => {
           disbursedAmount += (parseFloat(app.loan_amount) || 0);
         } else if (stName === 'rejected') {
           rejectedCount++;
-        } else if (['applied', 'pending'].includes(stName)) {
+        } else if (stName === 'pending') {
           pendingCount++;
         } else {
           inProgressCount++;
