@@ -363,13 +363,23 @@ export const updateBroker = async (req, res) => {
     const { id, name, email, city, mobile, status } = req.body;
     if (!id) return res.status(400).json({ success: false, message: "Partner ID required" });
 
+    let cleanId = id;
+    if (typeof id === 'string') {
+      const match = id.match(/\d+/);
+      if (match) cleanId = match[0];
+    }
+    const brokerId = parseInt(cleanId, 10);
+    if (isNaN(brokerId)) {
+      return res.status(400).json({ success: false, message: "Invalid partner ID" });
+    }
+
     // Find the user (partner)
-    let user = await User.findByPk(Number(id));
+    let user = await User.findByPk(brokerId);
     let partner = null;
 
     if (!user) {
       // Try by partner table
-      partner = await Partner.findByPk(Number(id));
+      partner = await Partner.findByPk(brokerId);
       if (!partner) return res.status(404).json({ success: false, message: "Partner not found" });
       user = await User.findByPk(partner.user_id);
     } else {
@@ -438,9 +448,19 @@ export const updateBorrower = async (req, res) => {
     const { id, name, email, mobile, status } = req.body;
     if (!id) return res.status(400).json({ success: false, message: "Borrower user ID required" });
 
-    let user = await User.findByPk(Number(id));
+    let cleanId = id;
+    if (typeof id === 'string') {
+      const match = id.match(/\d+/);
+      if (match) cleanId = match[0];
+    }
+    const targetId = parseInt(cleanId, 10);
+    if (isNaN(targetId)) {
+      return res.status(400).json({ success: false, message: "Invalid borrower ID" });
+    }
+
+    let user = await User.findByPk(targetId);
     if (!user) {
-      const borrowerRec = await Borrower.findByPk(Number(id));
+      const borrowerRec = await Borrower.findByPk(targetId);
       if (borrowerRec && borrowerRec.user_id) {
         user = await User.findByPk(borrowerRec.user_id);
       }
