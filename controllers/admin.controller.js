@@ -948,9 +948,9 @@ export const createAdmin = async (req, res) => {
 ----------------------------------------------------- */
 
 export const exportData = async (req, res) => {
-    const { from, to, type, format = "xlsx" } = req.query;
-    const start = new Date(from);
-    const end = new Date(to);
+    const { from, to, type, format = "xlsx", status: filterStatus, loanType: filterLoanType, search: filterSearch } = req.query;
+    const start = from ? new Date(from) : new Date(0);
+    const end = to ? new Date(to) : new Date();
 
     // Helper: send CSV from rows array + columns config
     function sendCSV(res, filename, columns, rows) {
@@ -963,16 +963,36 @@ export const exportData = async (req, res) => {
         }).join(",")
       );
       const csv = [headers, ...lines].join("\r\n");
-      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename=${filename}.csv`);
-      res.send(csv);
+      res.send("\uFEFF" + csv);
     }
     
     // -------------------- broker --------------------
-    if (type === "brokers") {
-    const data_b = await getBrokersList();
+    if (type === "brokers" || type === "partners") {
+    let data_b = await getBrokersList();
+
+    if (filterSearch) {
+      const q = String(filterSearch).toLowerCase().trim();
+      data_b = data_b.filter(b => 
+        (b.name && b.name.toLowerCase().includes(q)) ||
+        (b.email && b.email.toLowerCase().includes(q)) ||
+        (b.brokerId && b.brokerId.toLowerCase().includes(q))
+      );
+    }
+
+    if (filterStatus && filterStatus !== 'all_partners' && filterStatus !== 'all_statuses') {
+      const st = String(filterStatus).toLowerCase().trim();
+      data_b = data_b.filter(b => {
+        const bSt = (b.status || 'active').toLowerCase().trim();
+        if (st === 'active') return bSt === 'active' || bSt === 'approved';
+        if (st === 'inactive') return bSt !== 'active' && bSt !== 'approved';
+        return bSt === st;
+      });
+    }
 
     const columns = [
+      { header: "Partner ID", key: "brokerId" },
       { header: "Name", key: "name" },
       { header: "Email", key: "email" },
       { header: "Phone", key: "number" },
@@ -982,13 +1002,12 @@ export const exportData = async (req, res) => {
       { header: "Pincode", key: "pincode" },
       { header: "District", key: "district" },
       { header: "State", key: "state" },
-      { header: "Broker ID", key: "brokerId" },
       { header: "Clients", key: "clientCount" },
       { header: "Created", key: "createdAt" }
     ];
 
     if (format === "csv") {
-      return sendCSV(res, "brokers_report", columns, data_b);
+      return sendCSV(res, "partners_report", columns, data_b);
     }
 
     const workbook = new ExcelJS.Workbook();
@@ -997,6 +1016,7 @@ export const exportData = async (req, res) => {
 
     data_b.forEach((item) => {
       const row = sheet.addRow({
+        brokerId: item.brokerId,
         name: item.name,
         email: item.email,
         number: item.number,
@@ -1006,30 +1026,29 @@ export const exportData = async (req, res) => {
         pincode: item.pincode,
         district: item.district,
         state: item.state,
-        brokerId: item.brokerId,
         clientCount: item.clients ? item.clients.length : 0,
         createdAt: item.createdAt
       });
 
-      const update = new Date(item.statusUpdatedAt)
+      const update = new Date(item.statusUpdatedAt);
       if (update >= start && update <= end && item.statusUpdatedAt !== item.createdAt) {
-          if (item.status === "approved") {
+          if (item.status === "approved" || item.status === "active") {
             row.getCell("status").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "C6EFCE" } };
           }
-          if (item.status === "rejected") {
+          if (item.status === "rejected" || item.status === "inactive") {
             row.getCell("status").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFC7CE" } };
           }
       }
     });
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", "attachment; filename=brokers_report.xlsx");
+    res.setHeader("Content-Disposition", "attachment; filename=partners_report.xlsx");
     await workbook.xlsx.write(res);
-    res.end();
+    return res.end();
     }
 
-    // -------------------- client --------------------
-    if (type === "clients") {
+    // -------------------- client / leads --------------------
+    if (type === "clients" || type === "leads") {
     const data_c = await Loan_Application.findAll({
       include: [
         { model: Borrower, include: [{ model: User, as: 'user', attributes: ['name', 'email', 'mob_no'] }] },
@@ -1050,7 +1069,7 @@ export const exportData = async (req, res) => {
       { header: "Created", key: "createdAt" }
     ];
 
-    const rows = data_c.map(item => ({
+    let rows = data_c.map(item => ({
       app_id: item.application_no ?? `#${item.id}`,
       name: item.Borrower?.user ? item.Borrower?.user.name : "Unknown",
       email: item.Borrower?.user ? item.Borrower?.user.email : "-",
@@ -1061,6 +1080,27 @@ export const exportData = async (req, res) => {
       source: item.client_preference === 'partner_routing' ? "Partner" : "Direct",
       createdAt: item.createdAt
     }));
+
+    if (filterSearch) {
+      const q = String(filterSearch).toLowerCase().trim();
+      rows = rows.filter(r =>
+        (r.name && r.name.toLowerCase().includes(q)) ||
+        (r.email && r.email.toLowerCase().includes(q)) ||
+        (r.number && r.number.toLowerCase().includes(q)) ||
+        (r.app_id && r.app_id.toLowerCase().includes(q)) ||
+        (r.loan_type && r.loan_type.toLowerCase().includes(q))
+      );
+    }
+
+    if (filterStatus && filterStatus !== 'all_statuses') {
+      const st = String(filterStatus).toLowerCase().trim();
+      rows = rows.filter(r => (r.status || '').toLowerCase().trim() === st);
+    }
+
+    if (filterLoanType && filterLoanType !== 'all_loan_types') {
+      const lt = String(filterLoanType).toLowerCase().trim();
+      rows = rows.filter(r => (r.loan_type || '').toLowerCase().includes(lt));
+    }
 
     if (format === "csv") {
       return sendCSV(res, "applications_report", columns, rows);
