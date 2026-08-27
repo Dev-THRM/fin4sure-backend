@@ -360,49 +360,53 @@ export const brokersWithFullData = async (req, res) => {
 ----------------------------------------------------- */
 export const updateBroker = async (req, res) => {
   try {
-    const { id, name, city, mobile, status } = req.body;
-    if (!id) return res.status(400).json({ message: "Partner ID required" });
+    const { id, name, email, city, mobile, status } = req.body;
+    if (!id) return res.status(400).json({ success: false, message: "Partner ID required" });
 
     // Find the user (partner)
-    const user = await User.findByPk(id);
+    let user = await User.findByPk(Number(id));
+    let partner = null;
+
     if (!user) {
       // Try by partner table
-      const partner = await Partner.findByPk(id);
-      if (!partner) return res.status(404).json({ message: "Partner not found" });
-      const linkedUser = await User.findByPk(partner.user_id);
-      if (linkedUser) {
-        const updates = {};
-        if (name) updates.name = name;
-        if (mobile) updates.number = mobile;
-        if (status) updates.status = status;
-        await linkedUser.update(updates);
-      }
-      res.json({ success: true, message: "Partner updated" });
-      return;
+      partner = await Partner.findByPk(Number(id));
+      if (!partner) return res.status(404).json({ success: false, message: "Partner not found" });
+      user = await User.findByPk(partner.user_id);
+    } else {
+      partner = await Partner.findOne({ where: { user_id: user.id } });
+    }
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Partner user not found" });
     }
 
     const updates = {};
     if (name) updates.name = name;
-    if (mobile) updates.number = mobile;
-    if (status) updates.status = status;
+    if (email) updates.email = email;
+    if (mobile) updates.mob_no = mobile;
+    if (status) updates.status = status.toLowerCase();
 
     await user.update(updates);
 
-    // Update city in partners table if provided
-    if (city) {
+    // Update city/address in partners table if provided
+    if (city && partner) {
       try {
-        const partner = await Partner.findOne({ where: { user_id: id } });
-        if (partner) {
-          // Store city as address if no city_id mapping available
-          await partner.update({ address: city });
-        }
+        await partner.update({ address: city });
       } catch (_) {}
     }
 
-    res.json({ success: true, message: "Partner updated successfully" });
+    const updatedUser = await User.findByPk(user.id, {
+      attributes: { exclude: ['password_hash'] }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Partner updated successfully",
+      data: updatedUser
+    });
   } catch (err) {
     console.error("updateBroker error:", err);
-    res.status(500).json({ message: "Failed to update partner" });
+    return res.status(500).json({ success: false, message: "Failed to update partner", error: err.message });
   }
 };
 
