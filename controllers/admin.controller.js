@@ -24,6 +24,7 @@ const getBrokersList = async () => {
       where: {
         [Op.or]: [{ role_id: 2 }, { role_id: "2" }]
       },
+      order: [['createdAt', 'DESC'], ['id', 'DESC']],
       attributes: { exclude: ['password_hash'] },
       raw: true
     });
@@ -32,7 +33,12 @@ const getBrokersList = async () => {
       const partners = await Partner.findAll({ raw: true });
       const pUserIds = partners.map(p => p.user_id).filter(Boolean);
       if (pUserIds.length > 0) {
-        users = await User.findAll({ where: { id: pUserIds }, attributes: { exclude: ['password_hash'] }, raw: true });
+        users = await User.findAll({ 
+          where: { id: pUserIds }, 
+          order: [['createdAt', 'DESC'], ['id', 'DESC']],
+          attributes: { exclude: ['password_hash'] }, 
+          raw: true 
+        });
       }
     }
 
@@ -42,7 +48,7 @@ const getBrokersList = async () => {
     } catch (_) {}
     const statusMap = new Map(allStatuses.map(s => [s.id, s.name || '']));
 
-    return await Promise.all(
+    const enrichedBrokers = await Promise.all(
       users.map(async (user) => {
         let partner = null;
         let cityName = "";
@@ -81,16 +87,14 @@ const getBrokersList = async () => {
         let totalVolume = 0;
 
         const enrichedReferredApps = rawReferredApps.map(app => {
-          let rawSt = statusMap.get(app.status_id) || "Applied";
-          let lowerSt = rawSt.toLowerCase().trim();
-          if (['in-progress', 'in progress', 'pending'].includes(lowerSt)) {
-            rawSt = "Applied";
-            lowerSt = "applied";
-          }
+          const rawSt = statusMap.get(app.status_id) || "Applied";
+          const lowerSt = rawSt.toLowerCase().trim();
           const normalizedSt = ['disbursed', 'completed'].includes(lowerSt)
             ? 'disbursed'
             : lowerSt === 'rejected'
             ? 'rejected'
+            : lowerSt === 'pending'
+            ? 'pending'
             : 'in-progress';
 
           const amt = parseFloat(app.loan_amount) || 0;
@@ -98,13 +102,7 @@ const getBrokersList = async () => {
 
           if (normalizedSt === 'disbursed') {
             disbursedCount++;
-          } else if (['pending', 'applied'].includes(lowerSt)) {
-            pendingCount++;
-            inProgressCount++;
-          } else if (normalizedSt === 'rejected') {
-            // Only add to rejected count, handled implicitly if there's a rejectedCount (there isn't one here, pendingCount used to track it)
-            // Wait, originally it was `['pending', 'rejected'].includes(normalizedSt) ? pendingCount++ : inProgressCount++`
-            // Let's keep pendingCount counting rejected + applied for backwards compatibility with however stats is used.
+          } else if (['pending', 'rejected'].includes(normalizedSt)) {
             pendingCount++;
           } else {
             inProgressCount++;
@@ -157,26 +155,46 @@ const getBrokersList = async () => {
           return {
             id: `app_${app.id}`,
             name: clientName,
-            email: clientEmail || `${clientName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+            email: clientEmail || "-",
             number: clientPhone || "-",
+            phone: clientPhone || "-",
+            status: app.status || "Applied",
             dob: "-",
-            address: "-"
+            address: "-",
+            pincode: "-",
+            district: "-",
+            state: "-",
+            brokerId: String(user.id),
+            clients: [],
+            createdAt: app.createdAt
           };
         }));
 
-        const linkedClients = clientsFromApps.filter(Boolean);
+        const validClientsFromApps = clientsFromApps.filter(Boolean);
+
+        // Deduplicate clients by unique phone/email/name
+        const seenClients = new Set();
+        const linkedClients = [];
+        for (const c of validClientsFromApps) {
+          const identifier = (c.number && c.number !== '-') ? c.number : (c.email && c.email !== '-' ? c.email : c.name);
+          if (identifier && !seenClients.has(identifier.toLowerCase())) {
+            seenClients.add(identifier.toLowerCase());
+            linkedClients.push(c);
+          }
+        }
+
+        const brokerIdDisplay = user.id ? `F4S-${String(user.id).padStart(5, '0')}` : 'F4S-00000';
 
         return {
           id: user.id,
-          brokerId: String(user.id),
-          name: user.name,
-          email: user.email,
-          number: user.mob_no,
+          brokerId: brokerIdDisplay,
+          name: user.name || "Partner",
+          email: user.email || "-",
+          number: user.mob_no || user.number || "-",
           status: user.status || "active",
-          dob: partner ? partner.dob || "1990-01-01" : "1990-01-01",
-          address: partner ? partner.address || cityName : cityName,
-          city: cityName,
-          state: "India",
+          dob: "01/01/1990",
+          address: cityName || "Mumbai",
+          state: "Maharashtra",
           district: cityName,
           pincode: "000000",
           clients: linkedClients,
@@ -193,6 +211,12 @@ const getBrokersList = async () => {
         };
       })
     );
+
+    return enrichedBrokers.sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : (a.id ? Number(a.id) : 0);
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : (b.id ? Number(b.id) : 0);
+      return dateB - dateA;
+    });
   } catch (e) {
     console.error("getBrokersList error:", e);
     return [];
