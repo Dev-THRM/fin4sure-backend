@@ -24,6 +24,7 @@ const getBrokersList = async () => {
       where: {
         [Op.or]: [{ role_id: 2 }, { role_id: "2" }]
       },
+      order: [['createdAt', 'DESC'], ['id', 'DESC']],
       attributes: { exclude: ['password_hash'] },
       raw: true
     });
@@ -32,7 +33,12 @@ const getBrokersList = async () => {
       const partners = await Partner.findAll({ raw: true });
       const pUserIds = partners.map(p => p.user_id).filter(Boolean);
       if (pUserIds.length > 0) {
-        users = await User.findAll({ where: { id: pUserIds }, attributes: { exclude: ['password_hash'] }, raw: true });
+        users = await User.findAll({ 
+          where: { id: pUserIds }, 
+          order: [['createdAt', 'DESC'], ['id', 'DESC']],
+          attributes: { exclude: ['password_hash'] }, 
+          raw: true 
+        });
       }
     }
 
@@ -42,7 +48,7 @@ const getBrokersList = async () => {
     } catch (_) {}
     const statusMap = new Map(allStatuses.map(s => [s.id, s.name || '']));
 
-    return await Promise.all(
+    const enrichedBrokers = await Promise.all(
       users.map(async (user) => {
         let partner = null;
         let cityName = "";
@@ -81,16 +87,14 @@ const getBrokersList = async () => {
         let totalVolume = 0;
 
         const enrichedReferredApps = rawReferredApps.map(app => {
-          let rawSt = statusMap.get(app.status_id) || "Applied";
-          let lowerSt = rawSt.toLowerCase().trim();
-          if (['in-progress', 'in progress', 'pending'].includes(lowerSt)) {
-            rawSt = "Applied";
-            lowerSt = "applied";
-          }
+          const rawSt = statusMap.get(app.status_id) || "Applied";
+          const lowerSt = rawSt.toLowerCase().trim();
           const normalizedSt = ['disbursed', 'completed'].includes(lowerSt)
             ? 'disbursed'
             : lowerSt === 'rejected'
             ? 'rejected'
+            : lowerSt === 'pending'
+            ? 'pending'
             : 'in-progress';
 
           const amt = parseFloat(app.loan_amount) || 0;
@@ -98,13 +102,7 @@ const getBrokersList = async () => {
 
           if (normalizedSt === 'disbursed') {
             disbursedCount++;
-          } else if (['pending', 'applied'].includes(lowerSt)) {
-            pendingCount++;
-            inProgressCount++;
-          } else if (normalizedSt === 'rejected') {
-            // Only add to rejected count, handled implicitly if there's a rejectedCount (there isn't one here, pendingCount used to track it)
-            // Wait, originally it was `['pending', 'rejected'].includes(normalizedSt) ? pendingCount++ : inProgressCount++`
-            // Let's keep pendingCount counting rejected + applied for backwards compatibility with however stats is used.
+          } else if (['pending', 'rejected'].includes(normalizedSt)) {
             pendingCount++;
           } else {
             inProgressCount++;
@@ -157,26 +155,46 @@ const getBrokersList = async () => {
           return {
             id: `app_${app.id}`,
             name: clientName,
-            email: clientEmail || `${clientName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+            email: clientEmail || "-",
             number: clientPhone || "-",
+            phone: clientPhone || "-",
+            status: app.status || "Applied",
             dob: "-",
-            address: "-"
+            address: "-",
+            pincode: "-",
+            district: "-",
+            state: "-",
+            brokerId: String(user.id),
+            clients: [],
+            createdAt: app.createdAt
           };
         }));
 
-        const linkedClients = clientsFromApps.filter(Boolean);
+        const validClientsFromApps = clientsFromApps.filter(Boolean);
+
+        // Deduplicate clients by unique phone/email/name
+        const seenClients = new Set();
+        const linkedClients = [];
+        for (const c of validClientsFromApps) {
+          const identifier = (c.number && c.number !== '-') ? c.number : (c.email && c.email !== '-' ? c.email : c.name);
+          if (identifier && !seenClients.has(identifier.toLowerCase())) {
+            seenClients.add(identifier.toLowerCase());
+            linkedClients.push(c);
+          }
+        }
+
+        const brokerIdDisplay = user.id ? `F4S-${String(user.id).padStart(5, '0')}` : 'F4S-00000';
 
         return {
           id: user.id,
-          brokerId: String(user.id),
-          name: user.name,
-          email: user.email,
-          number: user.mob_no,
+          brokerId: brokerIdDisplay,
+          name: user.name || "Partner",
+          email: user.email || "-",
+          number: user.mob_no || user.number || "-",
           status: user.status || "active",
-          dob: partner ? partner.dob || "1990-01-01" : "1990-01-01",
-          address: partner ? partner.address || cityName : cityName,
-          city: cityName,
-          state: "India",
+          dob: "01/01/1990",
+          address: cityName || "Mumbai",
+          state: "Maharashtra",
           district: cityName,
           pincode: "000000",
           clients: linkedClients,
@@ -193,6 +211,12 @@ const getBrokersList = async () => {
         };
       })
     );
+
+    return enrichedBrokers.sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : (a.id ? Number(a.id) : 0);
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : (b.id ? Number(b.id) : 0);
+      return dateB - dateA;
+    });
   } catch (e) {
     console.error("getBrokersList error:", e);
     return [];
@@ -274,7 +298,7 @@ export const userCount = async (req, res) => {
           disbursedAmount += (parseFloat(app.loan_amount) || 0);
         } else if (stName === 'rejected') {
           rejectedCount++;
-        } else if (['applied', 'pending'].includes(stName)) {
+        } else if (stName === 'pending') {
           pendingCount++;
         } else {
           inProgressCount++;
@@ -967,9 +991,9 @@ export const createAdmin = async (req, res) => {
 ----------------------------------------------------- */
 
 export const exportData = async (req, res) => {
-    const { from, to, type, format = "xlsx" } = req.query;
-    const start = new Date(from);
-    const end = new Date(to);
+    const { from, to, type, format = "xlsx", status: filterStatus, loanType: filterLoanType, search: filterSearch } = req.query;
+    const start = from ? new Date(from) : new Date(0);
+    const end = to ? new Date(to) : new Date();
 
     // Helper: send CSV from rows array + columns config
     function sendCSV(res, filename, columns, rows) {
@@ -982,16 +1006,36 @@ export const exportData = async (req, res) => {
         }).join(",")
       );
       const csv = [headers, ...lines].join("\r\n");
-      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename=${filename}.csv`);
-      res.send(csv);
+      res.send("\uFEFF" + csv);
     }
     
     // -------------------- broker --------------------
-    if (type === "brokers") {
-    const data_b = await getBrokersList();
+    if (type === "brokers" || type === "partners") {
+    let data_b = await getBrokersList();
+
+    if (filterSearch) {
+      const q = String(filterSearch).toLowerCase().trim();
+      data_b = data_b.filter(b => 
+        (b.name && b.name.toLowerCase().includes(q)) ||
+        (b.email && b.email.toLowerCase().includes(q)) ||
+        (b.brokerId && b.brokerId.toLowerCase().includes(q))
+      );
+    }
+
+    if (filterStatus && filterStatus !== 'all_partners' && filterStatus !== 'all_statuses') {
+      const st = String(filterStatus).toLowerCase().trim();
+      data_b = data_b.filter(b => {
+        const bSt = (b.status || 'active').toLowerCase().trim();
+        if (st === 'active') return bSt === 'active' || bSt === 'approved';
+        if (st === 'inactive') return bSt !== 'active' && bSt !== 'approved';
+        return bSt === st;
+      });
+    }
 
     const columns = [
+      { header: "Partner ID", key: "brokerId" },
       { header: "Name", key: "name" },
       { header: "Email", key: "email" },
       { header: "Phone", key: "number" },
@@ -1001,13 +1045,12 @@ export const exportData = async (req, res) => {
       { header: "Pincode", key: "pincode" },
       { header: "District", key: "district" },
       { header: "State", key: "state" },
-      { header: "Broker ID", key: "brokerId" },
       { header: "Clients", key: "clientCount" },
       { header: "Created", key: "createdAt" }
     ];
 
     if (format === "csv") {
-      return sendCSV(res, "brokers_report", columns, data_b);
+      return sendCSV(res, "partners_report", columns, data_b);
     }
 
     const workbook = new ExcelJS.Workbook();
@@ -1016,6 +1059,7 @@ export const exportData = async (req, res) => {
 
     data_b.forEach((item) => {
       const row = sheet.addRow({
+        brokerId: item.brokerId,
         name: item.name,
         email: item.email,
         number: item.number,
@@ -1025,30 +1069,29 @@ export const exportData = async (req, res) => {
         pincode: item.pincode,
         district: item.district,
         state: item.state,
-        brokerId: item.brokerId,
         clientCount: item.clients ? item.clients.length : 0,
         createdAt: item.createdAt
       });
 
-      const update = new Date(item.statusUpdatedAt)
+      const update = new Date(item.statusUpdatedAt);
       if (update >= start && update <= end && item.statusUpdatedAt !== item.createdAt) {
-          if (item.status === "approved") {
+          if (item.status === "approved" || item.status === "active") {
             row.getCell("status").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "C6EFCE" } };
           }
-          if (item.status === "rejected") {
+          if (item.status === "rejected" || item.status === "inactive") {
             row.getCell("status").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFC7CE" } };
           }
       }
     });
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", "attachment; filename=brokers_report.xlsx");
+    res.setHeader("Content-Disposition", "attachment; filename=partners_report.xlsx");
     await workbook.xlsx.write(res);
-    res.end();
+    return res.end();
     }
 
-    // -------------------- client --------------------
-    if (type === "clients") {
+    // -------------------- client / leads --------------------
+    if (type === "clients" || type === "leads") {
     const data_c = await Loan_Application.findAll({
       include: [
         { model: Borrower, include: [{ model: User, as: 'user', attributes: ['name', 'email', 'mob_no'] }] },
@@ -1069,7 +1112,7 @@ export const exportData = async (req, res) => {
       { header: "Created", key: "createdAt" }
     ];
 
-    const rows = data_c.map(item => ({
+    let rows = data_c.map(item => ({
       app_id: item.application_no ?? `#${item.id}`,
       name: item.Borrower?.user ? item.Borrower?.user.name : "Unknown",
       email: item.Borrower?.user ? item.Borrower?.user.email : "-",
@@ -1080,6 +1123,27 @@ export const exportData = async (req, res) => {
       source: item.client_preference === 'partner_routing' ? "Partner" : "Direct",
       createdAt: item.createdAt
     }));
+
+    if (filterSearch) {
+      const q = String(filterSearch).toLowerCase().trim();
+      rows = rows.filter(r =>
+        (r.name && r.name.toLowerCase().includes(q)) ||
+        (r.email && r.email.toLowerCase().includes(q)) ||
+        (r.number && r.number.toLowerCase().includes(q)) ||
+        (r.app_id && r.app_id.toLowerCase().includes(q)) ||
+        (r.loan_type && r.loan_type.toLowerCase().includes(q))
+      );
+    }
+
+    if (filterStatus && filterStatus !== 'all_statuses') {
+      const st = String(filterStatus).toLowerCase().trim();
+      rows = rows.filter(r => (r.status || '').toLowerCase().trim() === st);
+    }
+
+    if (filterLoanType && filterLoanType !== 'all_loan_types') {
+      const lt = String(filterLoanType).toLowerCase().trim();
+      rows = rows.filter(r => (r.loan_type || '').toLowerCase().includes(lt));
+    }
 
     if (format === "csv") {
       return sendCSV(res, "applications_report", columns, rows);
