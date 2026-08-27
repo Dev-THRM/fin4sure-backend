@@ -1320,6 +1320,34 @@ export const allClients = async (req, res) => {
     const statusMap = new Map(allStatuses.map(s => [s.id, s.name || '']));
     const lenderMap = new Map(allLenders.map(l => [l.id, l.name || '']));
 
+    const appActiveLenderMap = new Map();
+    const appPendingLendersMap = new Map();
+    try {
+      const [lenderApps] = await sequelize.query(`
+        SELECT 
+          lap.loan_application_id,
+          lap.status AS lap_status,
+          COALESCE(l.name, l.short) AS lender_name
+        FROM lender_applications lap
+        LEFT JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
+        LEFT JOIN lenders l ON l.id = llr.lender_id
+        WHERE l.name IS NOT NULL
+        ORDER BY lap.id ASC
+      `);
+      lenderApps.forEach(row => {
+        const idKey = String(row.loan_application_id);
+        const st = String(row.lap_status || '').toLowerCase().trim();
+        if (st === 'active') {
+          appActiveLenderMap.set(idKey, row.lender_name);
+        } else if (st === 'pending') {
+          if (!appPendingLendersMap.has(idKey)) appPendingLendersMap.set(idKey, []);
+          if (!appPendingLendersMap.get(idKey).includes(row.lender_name)) {
+            appPendingLendersMap.get(idKey).push(row.lender_name);
+          }
+        }
+      });
+    } catch (_) {}
+
     // Stage priority for bestStage calculation
     const STAGE_PRIORITY = ['Disbursed', 'Sanction', 'Legal', 'Submitted', 'Credit', 'Docs', 'Applied'];
 
@@ -1367,8 +1395,20 @@ export const allClients = async (req, res) => {
           // Get all unique lenders across all applications for this borrower
           const lenderNames = [];
           for (const a of applications) {
-            if (a.lender_id && lenderMap.has(a.lender_id)) {
-              const lName = lenderMap.get(a.lender_id);
+            const appIdKey = String(a.id);
+            let resolvedLenderNames = [];
+            
+            if (appActiveLenderMap.has(appIdKey)) {
+              resolvedLenderNames = [appActiveLenderMap.get(appIdKey)];
+            } else if (appPendingLendersMap.has(appIdKey) && appPendingLendersMap.get(appIdKey).length > 0) {
+              resolvedLenderNames = appPendingLendersMap.get(appIdKey);
+            } else if (a.lender_id && lenderMap.has(a.lender_id)) {
+              resolvedLenderNames = [lenderMap.get(a.lender_id)];
+            } else if (a.client_preference && a.client_preference !== 'direct_reach' && a.client_preference !== 'partner_routing') {
+              resolvedLenderNames = a.client_preference.split(',').map(s => s.trim()).filter(Boolean);
+            }
+
+            for (const lName of resolvedLenderNames) {
               if (lName && !lenderNames.includes(lName)) lenderNames.push(lName);
             }
           }
@@ -1426,16 +1466,61 @@ export const getClientLoans = async (req, res) => {
       raw: true
     });
 
-    const loans = applications.map(app => ({
-      id: app.id,
-      application_no: app.application_no ? `F4S-${app.application_no}` : `F4S-${2000 + app.id}`,
-      loanType: loanTypeMap.get(app.loan_type_id) || 'Home Loan',
-      loanAmount: app.loan_amount || 0,
-      lender: lenderMap.get(app.lender_id) || '-',
-      status: statusMap.get(app.status_id) || 'Applied',
-      tenure: app.tenure || '-',
-      createdAt: app.createdAt
-    }));
+    const appIds = applications.map(a => a.id);
+    const appActiveLenderMap = new Map();
+    const appPendingLendersMap = new Map();
+    if (appIds.length > 0) {
+      try {
+        const [lenderApps] = await sequelize.query(`
+          SELECT 
+            lap.loan_application_id,
+            lap.status AS lap_status,
+            COALESCE(l.name, l.short) AS lender_name
+          FROM lender_applications lap
+          LEFT JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
+          LEFT JOIN lenders l ON l.id = llr.lender_id
+          WHERE lap.loan_application_id IN (${appIds.join(',')}) AND l.name IS NOT NULL
+          ORDER BY lap.id ASC
+        `);
+        lenderApps.forEach(row => {
+          const idKey = String(row.loan_application_id);
+          const st = String(row.lap_status || '').toLowerCase().trim();
+          if (st === 'active') {
+            appActiveLenderMap.set(idKey, row.lender_name);
+          } else if (st === 'pending') {
+            if (!appPendingLendersMap.has(idKey)) appPendingLendersMap.set(idKey, []);
+            if (!appPendingLendersMap.get(idKey).includes(row.lender_name)) {
+              appPendingLendersMap.get(idKey).push(row.lender_name);
+            }
+          }
+        });
+      } catch (_) {}
+    }
+
+    const loans = applications.map(app => {
+      const appIdKey = String(app.id);
+      let resolvedLenderNames = [];
+      if (appActiveLenderMap.has(appIdKey)) {
+        resolvedLenderNames = [appActiveLenderMap.get(appIdKey)];
+      } else if (appPendingLendersMap.has(appIdKey) && appPendingLendersMap.get(appIdKey).length > 0) {
+        resolvedLenderNames = appPendingLendersMap.get(appIdKey);
+      } else if (app.lender_id && lenderMap.has(app.lender_id)) {
+        resolvedLenderNames = [lenderMap.get(app.lender_id)];
+      } else if (app.client_preference && app.client_preference !== 'direct_reach' && app.client_preference !== 'partner_routing') {
+        resolvedLenderNames = app.client_preference.split(',').map(s => s.trim()).filter(Boolean);
+      }
+
+      return {
+        id: app.id,
+        application_no: app.application_no ? `F4S-${app.application_no}` : `F4S-${2000 + app.id}`,
+        loanType: loanTypeMap.get(app.loan_type_id) || 'Home Loan',
+        loanAmount: app.loan_amount || 0,
+        lender: resolvedLenderNames.length > 0 ? resolvedLenderNames.join(', ') : '-',
+        status: statusMap.get(app.status_id) || 'Applied',
+        tenure: app.tenure || '-',
+        createdAt: app.createdAt
+      };
+    });
 
     res.json(loans);
   } catch (e) {
