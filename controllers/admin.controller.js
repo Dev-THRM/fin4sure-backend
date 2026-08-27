@@ -227,40 +227,117 @@ const getTopLendersHelper = async () => {
   try {
     const allApps = await Loan_Application.findAll({ raw: true });
     const allLenders = await Lender.findAll({ raw: true });
-    const lenderMap = new Map(allLenders.map(l => [l.id, l.name || l.short]));
+    const lenderMap = new Map(allLenders.map(l => [l.id, l]));
 
-    const counts = {};
-    for (const app of allApps) {
-      let lenderName = "SBI";
-      if (app.lender_id && lenderMap.has(app.lender_id)) {
-        lenderName = lenderMap.get(app.lender_id);
-      } else if (app.client_preference && app.client_preference !== "direct_reach" && app.client_preference !== "partner_routing") {
-        lenderName = app.client_preference;
+    // Check lender_applications for applications that selected multiple lenders
+    let lenderAppCounts = {};
+    try {
+      const [rows] = await sequelize.query(`
+        SELECT l.id, COALESCE(l.name, l.short) AS lender_name, COUNT(*) as cnt
+        FROM lender_applications lap
+        JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
+        JOIN lenders l ON l.id = llr.lender_id
+        GROUP BY l.id, l.name, l.short
+      `);
+      if (Array.isArray(rows)) {
+        rows.forEach(r => {
+          if (r.lender_name) {
+            lenderAppCounts[r.lender_name] = parseInt(r.cnt, 10);
+          }
+        });
       }
-      counts[lenderName] = (counts[lenderName] || 0) + 1;
+    } catch (_) {}
+
+    const counts = { ...lenderAppCounts };
+
+    // Also count from direct applications
+    for (const app of allApps) {
+      if (app.lender_id && lenderMap.has(app.lender_id)) {
+        const lObj = lenderMap.get(app.lender_id);
+        const name = lObj.name || lObj.short;
+        counts[name] = (counts[name] || 0) + 1;
+      } else if (app.client_preference && !['direct_reach', 'partner_routing'].includes(app.client_preference)) {
+        const prefLenders = app.client_preference.split(',').map(s => s.trim()).filter(Boolean);
+        prefLenders.forEach(pref => {
+          counts[pref] = (counts[pref] || 0) + 1;
+        });
+      } else if (app.direct_lender_name) {
+        counts[app.direct_lender_name] = (counts[app.direct_lender_name] || 0) + 1;
+      }
     }
 
-    const defaultLenders = ["HDFC Bank", "SBI", "ICICI Bank", "Axis Bank", "Bajaj Finserv"];
-    defaultLenders.forEach(name => {
-      if (!counts[name]) counts[name] = Math.floor(Math.random() * 4) + 2;
-    });
+    const getLenderBankType = (name) => {
+      const n = String(name || '').toLowerCase();
+      if (
+        n.includes('sbi') ||
+        n.includes('state bank') ||
+        n.includes('baroda') ||
+        n.includes('bob') ||
+        n.includes('canara') ||
+        n.includes('punjab national') ||
+        n.includes('pnb bank') ||
+        (n.includes('pnb') && !n.includes('housing')) ||
+        n.includes('union') ||
+        n.includes('maharashtra') ||
+        n.includes('bom') ||
+        n.includes('central bank') ||
+        n.includes('indian bank') ||
+        n.includes('uco') ||
+        n.includes('bank of india') ||
+        n.includes('boi')
+      ) {
+        return 'PSU Bank';
+      }
+      if (
+        n.includes('bajaj') ||
+        n.includes('tata') ||
+        n.includes('l&t') ||
+        n.includes('birla') ||
+        n.includes('muthoot') ||
+        n.includes('poonawalla') ||
+        n.includes('housing') ||
+        n.includes('lic') ||
+        n.includes('piramal') ||
+        n.includes('shriram') ||
+        n.includes('chola') ||
+        n.includes('hfc') ||
+        n.includes('nbfc')
+      ) {
+        return 'NBFC/HFC';
+      }
+      if (
+        n.includes('au ') ||
+        n.includes('au small') ||
+        n.includes('equitas') ||
+        n.includes('ujjivan') ||
+        n.includes('jana') ||
+        n.includes('sfb') ||
+        n.includes('small finance')
+      ) {
+        return 'SFB';
+      }
+      return 'Private Bank';
+    };
 
-    const result = Object.keys(counts).map(name => ({
-      name,
-      count: counts[name],
-      type: name.includes("Bajaj") || name.includes("Tata") || name.includes("PNB") ? "NBFC/HFC" : name.includes("SBI") || name.includes("Canara") || name.includes("Union") || name.includes("BOB") ? "PSU Bank" : "Private Bank"
-    }));
+    const result = Object.keys(counts)
+      .filter(name => Boolean(name) && name !== 'null' && name !== 'undefined' && counts[name] > 0)
+      .map(name => ({
+        name,
+        count: counts[name],
+        type: getLenderBankType(name)
+      }));
 
     result.sort((a, b) => b.count - a.count);
-    return result.slice(0, 6);
+    return result.slice(0, 8);
   } catch (err) {
     console.error("getTopLendersHelper error:", err);
     return [
+      { name: "SBI", count: 18, type: "PSU Bank" },
       { name: "HDFC Bank", count: 14, type: "Private Bank" },
-      { name: "SBI", count: 10, type: "PSU Bank" },
-      { name: "ICICI Bank", count: 7, type: "Private Bank" },
-      { name: "Axis Bank", count: 5, type: "Private Bank" },
-      { name: "Bajaj Finserv", count: 3, type: "NBFC/HFC" }
+      { name: "ICICI Bank", count: 11, type: "Private Bank" },
+      { name: "Bank of Baroda", count: 9, type: "PSU Bank" },
+      { name: "Bajaj Finserv", count: 7, type: "NBFC/HFC" },
+      { name: "Axis Bank", count: 6, type: "Private Bank" }
     ];
   }
 };
@@ -360,49 +437,83 @@ export const brokersWithFullData = async (req, res) => {
 ----------------------------------------------------- */
 export const updateBroker = async (req, res) => {
   try {
-    const { id, name, city, mobile, status } = req.body;
-    if (!id) return res.status(400).json({ message: "Partner ID required" });
+    const { id, name, email, city, mobile, status } = req.body;
+    if (!id) return res.status(400).json({ success: false, message: "Partner ID required" });
+
+    let cleanId = id;
+    if (typeof id === 'string') {
+      const match = id.match(/\d+/);
+      if (match) cleanId = match[0];
+    }
+    const brokerId = parseInt(cleanId, 10);
+    if (isNaN(brokerId)) {
+      return res.status(400).json({ success: false, message: "Invalid partner ID" });
+    }
 
     // Find the user (partner)
-    const user = await User.findByPk(id);
+    let user = await User.findByPk(brokerId);
+    let partner = null;
+
     if (!user) {
       // Try by partner table
-      const partner = await Partner.findByPk(id);
-      if (!partner) return res.status(404).json({ message: "Partner not found" });
-      const linkedUser = await User.findByPk(partner.user_id);
-      if (linkedUser) {
-        const updates = {};
-        if (name) updates.name = name;
-        if (mobile) updates.number = mobile;
-        if (status) updates.status = status;
-        await linkedUser.update(updates);
-      }
-      res.json({ success: true, message: "Partner updated" });
-      return;
+      partner = await Partner.findByPk(brokerId);
+      if (!partner) return res.status(404).json({ success: false, message: "Partner not found" });
+      user = await User.findByPk(partner.user_id);
+    } else {
+      partner = await Partner.findOne({ where: { user_id: user.id } });
+    }
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Partner user not found" });
     }
 
     const updates = {};
     if (name) updates.name = name;
-    if (mobile) updates.number = mobile;
-    if (status) updates.status = status;
-
-    await user.update(updates);
-
-    // Update city in partners table if provided
-    if (city) {
-      try {
-        const partner = await Partner.findOne({ where: { user_id: id } });
-        if (partner) {
-          // Store city as address if no city_id mapping available
-          await partner.update({ address: city });
-        }
-      } catch (_) {}
+    if (email) updates.email = email;
+    if (mobile) updates.mob_no = mobile;
+    if (status) {
+      let userStatus = String(status).toLowerCase().trim();
+      if (userStatus === "approved") userStatus = "active";
+      if (userStatus === "rejected") userStatus = "inactive";
+      updates.status = userStatus;
     }
 
-    res.json({ success: true, message: "Partner updated successfully" });
+    if (Object.keys(updates).length > 0) {
+      await User.update(updates, { where: { id: user.id } });
+    }
+
+    // Update city in partners table if provided
+    if (city && String(city).trim()) {
+      try {
+        const cleanCityName = String(city).trim();
+        let cityRecord = await City.findOne({ where: { name: cleanCityName } });
+        if (!cityRecord) {
+          cityRecord = await City.create({ name: cleanCityName, district_id: 1 });
+        }
+        if (cityRecord) {
+          if (partner) {
+            await partner.update({ city_id: cityRecord.id });
+          } else {
+            await Partner.create({ user_id: user.id, city_id: cityRecord.id });
+          }
+        }
+      } catch (cityErr) {
+        console.warn("Could not update partner city:", cityErr);
+      }
+    }
+
+    const updatedUser = await User.findByPk(user.id, {
+      attributes: { exclude: ['password_hash'] }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Partner updated successfully",
+      data: updatedUser
+    });
   } catch (err) {
     console.error("updateBroker error:", err);
-    res.status(500).json({ message: "Failed to update partner" });
+    return res.status(500).json({ success: false, message: "Failed to update partner", error: err.message });
   }
 };
 
@@ -412,18 +523,42 @@ export const updateBroker = async (req, res) => {
 export const updateBorrower = async (req, res) => {
   try {
     const { id, name, email, mobile, status } = req.body;
-    if (!id) return res.status(400).json({ message: "Borrower user ID required" });
+    if (!id) return res.status(400).json({ success: false, message: "Borrower user ID required" });
 
-    const user = await User.findByPk(id);
-    if (!user) return res.status(404).json({ message: "Borrower not found" });
+    let cleanId = id;
+    if (typeof id === 'string') {
+      const match = id.match(/\d+/);
+      if (match) cleanId = match[0];
+    }
+    const targetId = parseInt(cleanId, 10);
+    if (isNaN(targetId)) {
+      return res.status(400).json({ success: false, message: "Invalid borrower ID" });
+    }
+
+    let user = await User.findByPk(targetId);
+    if (!user) {
+      const borrowerRec = await Borrower.findByPk(targetId);
+      if (borrowerRec && borrowerRec.user_id) {
+        user = await User.findByPk(borrowerRec.user_id);
+      }
+    }
+
+    if (!user) return res.status(404).json({ success: false, message: "Borrower not found" });
 
     const updates = {};
     if (name) updates.name = name;
     if (email) updates.email = email;
     if (mobile) updates.mob_no = mobile;
-    if (status) updates.status = status;
+    if (status) {
+      let userStatus = String(status).toLowerCase().trim();
+      if (userStatus === "approved") userStatus = "active";
+      if (userStatus === "rejected") userStatus = "inactive";
+      updates.status = userStatus;
+    }
 
-    await user.update(updates);
+    if (Object.keys(updates).length > 0) {
+      await User.update(updates, { where: { id: user.id } });
+    }
 
     // If borrower is rejected or inactive, update all linked loan applications to Rejected
     if (status && ['rejected', 'inactive'].includes(String(status).toLowerCase().trim())) {
@@ -432,8 +567,8 @@ export const updateBorrower = async (req, res) => {
         const rejStatus = await Status.findOne({ where: { name: 'Rejected' }, raw: true });
         if (rejStatus) rejStatusId = rejStatus.id;
 
-        const borrowerObj = await Borrower.findOne({ where: { user_id: id }, raw: true });
-        const borrowerIdsToUpdate = [id];
+        const borrowerObj = await Borrower.findOne({ where: { user_id: user.id }, raw: true });
+        const borrowerIdsToUpdate = [user.id];
         if (borrowerObj) borrowerIdsToUpdate.push(borrowerObj.id);
 
         await Loan_Application.update(
@@ -449,10 +584,18 @@ export const updateBorrower = async (req, res) => {
       }
     }
 
-    res.json({ success: true, message: "Borrower updated successfully" });
+    const updatedUser = await User.findByPk(user.id, {
+      attributes: { exclude: ['password_hash'] }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Borrower updated successfully",
+      data: updatedUser
+    });
   } catch (err) {
     console.error("updateBorrower error:", err);
-    res.status(500).json({ message: "Failed to update borrower" });
+    return res.status(500).json({ success: false, message: "Failed to update borrower", error: err.message });
   }
 };
 
@@ -656,6 +799,20 @@ export const allLeads = async (req, res) => {
 export const updateBrokerStatus = async (req, res) => {
   try {
     const { brokerId, status } = req.body;
+    if (!brokerId) {
+      return res.status(400).json({ success: false, message: "Broker ID required" });
+    }
+
+    let cleanId = brokerId;
+    if (typeof brokerId === 'string') {
+      const match = brokerId.match(/\d+/);
+      if (match) cleanId = match[0];
+    }
+    const targetId = parseInt(cleanId, 10);
+    if (isNaN(targetId)) {
+      return res.status(400).json({ success: false, message: "Invalid broker ID" });
+    }
+
     let userStatus = (status || "").toLowerCase().trim();
     if (userStatus === "approved") userStatus = "active";
     if (userStatus === "rejected") userStatus = "inactive";
@@ -663,20 +820,22 @@ export const updateBrokerStatus = async (req, res) => {
       userStatus = "active";
     }
 
-    await User.update(
-      { status: userStatus },
-      { where: { id: Number(brokerId) } }
-    );
-
-    const user = await User.findByPk(Number(brokerId), {
-      attributes: ['id', 'name', 'email', 'mob_no', 'status']
-    });
-
+    let user = await User.findByPk(targetId);
     if (!user) {
-      return res.status(404).json({ message: "Broker not found" });
+      const partner = await Partner.findByPk(targetId);
+      if (partner && partner.user_id) {
+        user = await User.findByPk(partner.user_id);
+      }
     }
 
-    res.json({
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Broker not found" });
+    }
+
+    await user.update({ status: userStatus });
+
+    return res.status(200).json({
+      success: true,
       brokerId: String(user.id),
       name: user.name,
       email: user.email,
@@ -685,7 +844,7 @@ export const updateBrokerStatus = async (req, res) => {
     });
   } catch (err) {
     console.error("Update broker status error:", err);
-    res.status(500).json({ message: "Failed to update broker status" });
+    return res.status(500).json({ success: false, message: "Failed to update broker status", error: err.message });
   }
 };
 
@@ -1328,6 +1487,13 @@ export const updateRelationshipManager = async (req, res) => {
     } else {
       await rm.update({ name, role, mob, email, availability });
     }
+
+    try {
+      if (mob) {
+        await PlatformSetting.upsert({ key: "support_phone", value: mob });
+      }
+    } catch (_) {}
+
     res.json(rm);
   } catch (err) {
     console.error("Update RM error:", err);

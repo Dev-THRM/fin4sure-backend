@@ -2,6 +2,8 @@ import State from "../models/state.js";
 import District from "../models/district.js";
 import City from "../models/city.js";
 import Pincode from "../models/pincode.js";
+import PlatformSetting from "../models/platform_settings.model.js";
+import RelationshipManager from "../models/relationship_manager.model.js";
 
 export const getStates = async (req, res) => {
   try {
@@ -102,18 +104,40 @@ export const getLocationByPincode = async (req, res) => {
 
 export const getPublicSettings = async (req, res) => {
   try {
-    const PlatformSetting = (await import("../models/platform_settings.model.js")).default;
-    const settings = await PlatformSetting.findAll({ raw: true });
+    let settings = [];
+    try {
+      settings = await PlatformSetting.findAll({ raw: true });
+    } catch (_) {}
+
+    let rm = null;
+    try {
+      rm = await RelationshipManager.findOne({ raw: true });
+    } catch (_) {}
+
     const settingsObj = {};
-    settings.forEach(s => {
-      settingsObj[s.key] = s.value;
-    });
-    res.status(200).json({
+    if (Array.isArray(settings)) {
+      settings.forEach(s => {
+        if (s && s.key) {
+          settingsObj[s.key] = s.value;
+        }
+      });
+    }
+
+    const phoneVal = (rm && rm.mob) ? rm.mob : (settingsObj.support_phone || "1800-123-4567");
+
+    return res.status(200).json({
       success: true,
       announcement_banner: settingsObj.announcement_banner || "",
-      roi_disclaimer: settingsObj.roi_disclaimer || ""
+      roi_disclaimer: settingsObj.roi_disclaimer || "",
+      support_phone: phoneVal,
+      rm_details: rm || null
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(200).json({
+      success: true,
+      announcement_banner: "",
+      roi_disclaimer: "",
+      support_phone: "1800-123-4567"
+    });
   }
 };
