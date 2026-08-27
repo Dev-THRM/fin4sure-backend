@@ -12,8 +12,14 @@ import { applyLoan, getMyLeads } from "../controllers/lead.controller.js";
 import { verifyUser, isClient, isClientOrBroker } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
+import fs from 'fs';
 
 // -------------------- Client routes --------------------
+
+// Ensure uploads directory exists
+if (!fs.existsSync('uploads')) {
+  fs.mkdirSync('uploads', { recursive: true });
+}
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
