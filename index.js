@@ -173,14 +173,18 @@ app.get("/check-uploads", async (req, res) => {
       dbDocs = [{ error: dbErr.message }];
     }
 
+    const persistentDir = getUploadsDir();
+    const persistentFiles = fs.existsSync(persistentDir) ? fs.readdirSync(persistentDir) : [];
+
     res.json({
       status: "success",
       serverRoot: __dirname,
       processCwd: process.cwd(),
-      uploadsFolderTarget: uploadsPath,
-      uploadsFolderExists: exists,
-      filesCountOnDisk: filesOnDisk.length,
-      filesOnDisk: filesOnDisk,
+      persistentUploadsDir: persistentDir,
+      persistentUploadsDirFiles: persistentFiles,
+      localUploadsPath: uploadsPath,
+      localUploadsExists: exists,
+      localUploadsFiles: filesOnDisk,
       dbDocumentsCount: Array.isArray(dbDocs) ? dbDocs.length : 0,
       recentDbDocuments: dbDocs
     });

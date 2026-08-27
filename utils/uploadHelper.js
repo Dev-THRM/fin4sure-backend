@@ -44,17 +44,31 @@ export function findFileInAllUploadLocations(filename) {
   const candidatePaths = [
     path.join(getUploadsDir(), cleanFilename),
     path.resolve(__dirname, "../uploads", cleanFilename),
+    path.resolve(__dirname, "../../uploads", cleanFilename),
     path.join("/home/u628156753/nodejs/uploads", cleanFilename),
     path.join("/home/u628156753/public_html/uploads", cleanFilename)
   ];
 
-  // Also search dynamic Hostinger hbuilds version folders so older uploaded files are never lost
+  // Dynamic discovery across all Hostinger version build directories
   try {
-    const versionsDir = "/home/u628156753/domains/palevioletred-ape-449755.hostingersite.com/hbuilds/versions";
+    const versionsDir = path.resolve(__dirname, "../../..");
     if (fs.existsSync(versionsDir)) {
       const versionFolders = fs.readdirSync(versionsDir);
       for (const vf of versionFolders) {
         candidatePaths.push(path.join(versionsDir, vf, "nodejs", "uploads", cleanFilename));
+        candidatePaths.push(path.join(versionsDir, vf, "uploads", cleanFilename));
+      }
+    }
+  } catch (_) {}
+
+  // Fallback domain-based versions path
+  try {
+    const altVersionsDir = "/home/u628156753/hbuilds/versions";
+    if (fs.existsSync(altVersionsDir)) {
+      const versionFolders = fs.readdirSync(altVersionsDir);
+      for (const vf of versionFolders) {
+        candidatePaths.push(path.join(altVersionsDir, vf, "nodejs", "uploads", cleanFilename));
+        candidatePaths.push(path.join(altVersionsDir, vf, "uploads", cleanFilename));
       }
     }
   } catch (_) {}
