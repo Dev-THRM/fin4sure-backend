@@ -81,14 +81,16 @@ const getBrokersList = async () => {
         let totalVolume = 0;
 
         const enrichedReferredApps = rawReferredApps.map(app => {
-          const rawSt = statusMap.get(app.status_id) || "Applied";
-          const lowerSt = rawSt.toLowerCase().trim();
+          let rawSt = statusMap.get(app.status_id) || "Applied";
+          let lowerSt = rawSt.toLowerCase().trim();
+          if (['in-progress', 'pending'].includes(lowerSt)) {
+            rawSt = "Applied";
+            lowerSt = "applied";
+          }
           const normalizedSt = ['disbursed', 'completed'].includes(lowerSt)
             ? 'disbursed'
             : lowerSt === 'rejected'
             ? 'rejected'
-            : lowerSt === 'pending'
-            ? 'pending'
             : 'in-progress';
 
           const amt = parseFloat(app.loan_amount) || 0;
@@ -96,7 +98,13 @@ const getBrokersList = async () => {
 
           if (normalizedSt === 'disbursed') {
             disbursedCount++;
-          } else if (['pending', 'rejected'].includes(normalizedSt)) {
+          } else if (['pending', 'applied'].includes(lowerSt)) {
+            pendingCount++;
+            inProgressCount++;
+          } else if (normalizedSt === 'rejected') {
+            // Only add to rejected count, handled implicitly if there's a rejectedCount (there isn't one here, pendingCount used to track it)
+            // Wait, originally it was `['pending', 'rejected'].includes(normalizedSt) ? pendingCount++ : inProgressCount++`
+            // Let's keep pendingCount counting rejected + applied for backwards compatibility with however stats is used.
             pendingCount++;
           } else {
             inProgressCount++;
@@ -534,16 +542,19 @@ export const allLeads = async (req, res) => {
       if (!clientName) clientName = `Application #${app.id}`;
 
       const isBorrowerRejected = ['rejected', 'inactive'].includes(String(app.client_status || '').toLowerCase().trim());
-      const rawStatus = isBorrowerRejected ? "REJECTED" : (app.status_name || "Applied");
-      const lowerSt = rawStatus.toLowerCase().trim();
+      let rawStatus = isBorrowerRejected ? "REJECTED" : (app.status_name || "Applied");
+      let lowerSt = rawStatus.toLowerCase().trim();
+      
+      if (!isBorrowerRejected && ['in-progress', 'pending'].includes(lowerSt)) {
+        rawStatus = "Applied";
+        lowerSt = "applied";
+      }
 
-      let normalizedStatus = 'pending';
+      let normalizedStatus = 'in-progress';
       if (isBorrowerRejected || lowerSt === 'rejected') {
         normalizedStatus = 'rejected';
       } else if (['disbursed', 'completed'].includes(lowerSt)) {
         normalizedStatus = 'disbursed';
-      } else if (['applied', 'pending'].includes(lowerSt)) {
-        normalizedStatus = 'pending';
       } else {
         normalizedStatus = 'in-progress';
       }
@@ -716,9 +727,12 @@ export const updateApplication = async (req, res) => {
     if (!app) return res.status(404).json({ message: "Application not found" });
 
     // 1. Resolve status_id from status or stage name if provided
-    let targetStatusName = status || stage;
-    if (status && status.toLowerCase().trim() === 'rejected') {
-      targetStatusName = 'rejected';
+    let targetStatusName = stage;
+    if (!targetStatusName && status) {
+      const st = status.toLowerCase().trim();
+      if (['rejected', 'disbursed', 'completed'].includes(st)) {
+        targetStatusName = status;
+      }
     }
     
     let status_id = app.status_id;
@@ -881,8 +895,13 @@ export const updateApplication = async (req, res) => {
       try {
         const sObj = await Status.findByPk(app.status_id, { raw: true });
         if (sObj) {
-          const lowerSt = sObj.name.toLowerCase().trim();
-          finalStageName = sObj.name;
+          let rawSt = sObj.name;
+          let lowerSt = rawSt.toLowerCase().trim();
+          if (['in-progress', 'pending'].includes(lowerSt)) {
+            rawSt = "Applied";
+            lowerSt = "applied";
+          }
+          finalStageName = rawSt;
           finalStatusName = ['disbursed', 'completed'].includes(lowerSt)
             ? 'disbursed'
             : lowerSt === 'rejected'
@@ -1807,14 +1826,18 @@ export const getDashboardBundle = async (req, res) => {
           try {
             const sObj = await Status.findByPk(app.status_id, { raw: true });
             if (sObj) {
-              const lowerSt = sObj.name.toLowerCase().trim();
-              stageName = sObj.name;
+              let rawSt = sObj.name;
+              let lowerSt = rawSt.toLowerCase().trim();
+              if (['in-progress', 'pending'].includes(lowerSt)) {
+                rawSt = "Applied";
+                lowerSt = "applied";
+              }
+              stageName = rawSt;
+              
               if (['disbursed', 'completed'].includes(lowerSt)) {
                 statusName = 'disbursed';
               } else if (lowerSt === 'rejected') {
                 statusName = 'rejected';
-              } else if (['applied', 'pending'].includes(lowerSt)) {
-                statusName = 'pending';
               } else {
                 statusName = 'in-progress';
               }
