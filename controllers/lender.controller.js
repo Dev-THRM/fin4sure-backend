@@ -64,3 +64,15 @@ export const getLenders = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Server Error', error: error.message });
   }
 };
+
+export const getPublicLenderRates = async (req, res) => {
+  try {
+    const { loanTypeShortId = 'HL' } = req.query;
+    const { getLenderRatesHelper } = await import('./admin.controller.js');
+    const rates = await getLenderRatesHelper(loanTypeShortId);
+    return res.status(200).json({ success: true, data: rates });
+  } catch (error) {
+    console.error('Error in getPublicLenderRates:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
