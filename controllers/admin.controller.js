@@ -2338,3 +2338,59 @@ export const updateScraperScheduleController = async (req, res) => {
     res.status(400).json({ success: false, message: err.message });
   }
 };
+
+/* -----------------------------------------------------
+   ADMIN – GET APPLICATION DOCUMENTS
+----------------------------------------------------- */
+export const getApplicationDocuments = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const documents = await Document.findAll({
+      where: { loan_application_id: id },
+      raw: true
+    });
+    res.json(documents);
+  } catch (err) {
+    console.error("Get application documents error:", err);
+    res.status(500).json({ message: "Failed to fetch documents" });
+  }
+};
+
+/* -----------------------------------------------------
+   ADMIN – UPDATE APPLICATION DOCUMENT STATUS
+----------------------------------------------------- */
+export const updateApplicationDocumentStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    if (!['verified', 'rejected'].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
+    const doc = await Document.findByPk(id);
+    if (!doc) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+    
+    if (status === 'rejected') {
+      try {
+        const fs = await import("fs");
+        const path = await import("path");
+        const { fileURLToPath } = await import("url");
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = path.dirname(__filename);
+        const filePath = path.join(__dirname, "..", doc.file_path);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (_) {}
+    }
+
+    await doc.update({ status });
+    res.json({ message: `Document status updated to ${status}`, doc });
+  } catch (err) {
+    console.error("Update document status error:", err);
+    res.status(500).json({ message: "Failed to update document status" });
+  }
+};

@@ -23,7 +23,9 @@ import {
   getDashboardBundle,
   triggerBankScraper,
   getScraperStatusController,
-  updateScraperScheduleController
+  updateScraperScheduleController,
+  getApplicationDocuments,
+  updateApplicationDocumentStatus
 } from "../controllers/admin.controller.js";
 
 import { verifyUser, isAdmin } from "../middlewares/auth.middleware.js";
@@ -48,6 +50,8 @@ router.post("/update-broker", verifyUser, isAdmin, updateBroker);
 router.post("/update-borrower", verifyUser, isAdmin, updateBorrower);
 router.post("/lead-status", verifyUser, isAdmin, updateLeadStatus);
 router.put("/leads/:id", verifyUser, isAdmin, updateApplication);
+router.get("/application-documents/:id", verifyUser, isAdmin, getApplicationDocuments);
+router.put("/application-documents/:id/status", verifyUser, isAdmin, updateApplicationDocumentStatus);
 router.post("/leads/:id", verifyUser, isAdmin, updateApplication);
 router.post("/update-application", verifyUser, isAdmin, updateApplication);
 

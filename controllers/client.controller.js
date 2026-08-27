@@ -149,38 +149,69 @@ export const uploadDocs = async (req, res) => {
       return res.status(404).json({ message: "Loan application not found or unauthorized access" });
     }
 
-    const { files } = req.body;
-    if (!files || !Array.isArray(files)) {
-      return res.status(400).json({ message: "Invalid documents payload." });
+    const files = req.files;
+    if (!files || files.length === 0) {
+      return res.status(400).json({ message: "No files uploaded." });
+    }
+
+    let types = req.body.types;
+    if (!Array.isArray(types)) {
+      types = types ? [types] : [];
     }
 
     const requiredTypes = ['aadhar', 'pan', 'salary slip', 'bank statement'];
-    const uploadedTypes = files.map(f => f.type?.toLowerCase().trim());
-    const hasAllRequired = requiredTypes.every(t => uploadedTypes.includes(t));
-
-    if (!hasAllRequired) {
-      return res.status(400).json({ message: "Aadhaar, PAN, salary slips, and bank statements are all required to progress the application." });
-    }
-
-    // Create Document records in DB
-    for (const file of files) {
+    const newUploadedTypes = types.map(t => t?.toLowerCase().trim());
+    
+    // Create Document records in DB (remove old ones of same type)
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const docType = newUploadedTypes[i] || 'other';
+      
+      await Document.destroy({
+        where: { loan_application_id: applicationId, document_type: docType }
+      });
+      
       await Document.create({
         loan_application_id: applicationId,
-        document_type: file.type,
-        file_name: file.name,
-        file_path: `/uploads/${file.name}`,
+        document_type: docType,
+        file_name: file.originalname,
+        file_path: `/uploads/${file.filename}`,
         status: 'pending'
       });
     }
 
-    // Progress status_id to 3 (credit)
-    app.status_id = 3;
-    await app.save();
+    // Check all existing valid documents
+    const allDocs = await Document.findAll({ where: { loan_application_id: applicationId } });
+    const allValidTypes = allDocs.filter(d => d.status !== 'rejected').map(d => d.document_type);
+    const hasAllRequired = requiredTypes.every(t => allValidTypes.includes(t));
 
-    return res.json({ message: "Documents uploaded and application progressed to Credit evaluation" });
+    if (hasAllRequired) {
+      app.status_id = 3;
+      await app.save();
+      return res.json({ message: "Documents uploaded and application progressed to Credit evaluation" });
+    } else {
+      return res.json({ message: "Partial documents saved. Please upload remaining documents." });
+    }
   } catch (err) {
     console.error("Upload docs error:", err);
     return res.status(500).json({ message: "Server error during document upload" });
+  }
+};
+
+/* -----------------------------------------------------
+   CLIENT – GET APPLICATION DOCUMENTS
+----------------------------------------------------- */
+export const getApplicationDocuments = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const documents = await Document.findAll({
+      where: { loan_application_id: id },
+      raw: true
+    });
+    res.json(documents);
+  } catch (err) {
+    console.error("Client get documents error:", err);
+    res.status(500).json({ message: "Failed to fetch documents" });
   }
 };
 

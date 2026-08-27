@@ -13,6 +13,11 @@ import scraperRouter from "./routes/scraper.routes.js";
 import locationRouter from "./routes/location.routes.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Import models to ensure they are registered with Sequelize before sync
 import './models/admin.model.js';
@@ -49,6 +54,9 @@ app.use(
 
 app.use(express.json());
 app.use(cookieParser());
+
+// Serve uploaded files statically
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Routes
 app.use("/api/auth", authRouter);
