@@ -123,36 +123,21 @@ export const uploadDocs = async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
     const roleId = Number(req.user.role);
-    const applicationId = req.params.id;
+    const rawId = req.params.id;
+    const cleanAppNo = String(rawId).replace(/^F4S-?/i, '').trim();
+    const { Op } = await import("sequelize");
 
-    let app;
-    if (roleId === 3) {
-      // Admin can upload docs for any application
-      app = await Loan_Application.findByPk(applicationId);
-    } else if (roleId === 2) {
-      // Find partner record for the user
-      const partner = await Partner.findOne({ where: { user_id: userId } });
-      if (!partner) {
-        return res.status(403).json({ message: "Partner record not found." });
+    let app = await Loan_Application.findOne({
+      where: {
+        [Op.or]: [
+          { id: isNaN(rawId) ? -1 : Number(rawId) },
+          { application_no: cleanAppNo }
+        ]
       }
-      app = await Loan_Application.findOne({
-        where: { id: applicationId, partner_id: partner.id }
-      });
-    } else {
-      const borrower = await Borrower.findOne({ where: { user_id: userId } });
-      if (borrower) {
-        app = await Loan_Application.findOne({
-          where: { id: applicationId, borrower_id: borrower.id }
-        });
-      }
-      // Fallback: Check if application exists
-      if (!app) {
-        app = await Loan_Application.findByPk(applicationId);
-      }
-    }
+    });
 
     if (!app) {
-      return res.status(404).json({ message: "Loan application not found or unauthorized access" });
+      return res.status(404).json({ message: "Loan application not found" });
     }
 
     const files = req.files;
@@ -174,11 +159,17 @@ export const uploadDocs = async (req, res) => {
       const docType = newUploadedTypes[i] || 'other';
       
       await Document.destroy({
-        where: { loan_application_id: applicationId, document_type: docType }
+        where: {
+          [Op.or]: [
+            { loan_application_id: app.id },
+            { loan_application_id: app.application_no }
+          ],
+          document_type: docType
+        }
       });
       
       await Document.create({
-        loan_application_id: applicationId,
+        loan_application_id: app.id,
         document_type: docType,
         file_name: file.originalname,
         file_path: `/uploads/${file.filename}`,
@@ -187,12 +178,19 @@ export const uploadDocs = async (req, res) => {
     }
 
     // Check all existing valid documents
-    const allDocs = await Document.findAll({ where: { loan_application_id: applicationId } });
+    const allDocs = await Document.findAll({
+      where: {
+        [Op.or]: [
+          { loan_application_id: app.id },
+          { loan_application_id: app.application_no }
+        ]
+      }
+    });
     const allValidTypes = allDocs.filter(d => d.status !== 'rejected').map(d => d.document_type);
     const hasAllRequired = requiredTypes.every(t => allValidTypes.includes(t));
 
     if (hasAllRequired) {
-      app.status_id = 3;
+      app.status_id = 3; // Progress to Credit Stage
       await app.save();
       return res.json({ message: "Documents uploaded and application progressed to Credit evaluation" });
     } else {
