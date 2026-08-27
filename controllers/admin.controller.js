@@ -83,7 +83,7 @@ const getBrokersList = async () => {
         const enrichedReferredApps = rawReferredApps.map(app => {
           let rawSt = statusMap.get(app.status_id) || "Applied";
           let lowerSt = rawSt.toLowerCase().trim();
-          if (['in-progress', 'pending'].includes(lowerSt)) {
+          if (['in-progress', 'in progress', 'pending'].includes(lowerSt)) {
             rawSt = "Applied";
             lowerSt = "applied";
           }
@@ -545,7 +545,7 @@ export const allLeads = async (req, res) => {
       let rawStatus = isBorrowerRejected ? "REJECTED" : (app.status_name || "Applied");
       let lowerSt = rawStatus.toLowerCase().trim();
       
-      if (!isBorrowerRejected && ['in-progress', 'pending'].includes(lowerSt)) {
+      if (!isBorrowerRejected && ['in-progress', 'in progress', 'pending'].includes(lowerSt)) {
         rawStatus = "Applied";
         lowerSt = "applied";
       }
@@ -897,7 +897,7 @@ export const updateApplication = async (req, res) => {
         if (sObj) {
           let rawSt = sObj.name;
           let lowerSt = rawSt.toLowerCase().trim();
-          if (['in-progress', 'pending'].includes(lowerSt)) {
+          if (['in-progress', 'in progress', 'pending'].includes(lowerSt)) {
             rawSt = "Applied";
             lowerSt = "applied";
           }
@@ -1828,7 +1828,7 @@ export const getDashboardBundle = async (req, res) => {
             if (sObj) {
               let rawSt = sObj.name;
               let lowerSt = rawSt.toLowerCase().trim();
-              if (['in-progress', 'pending'].includes(lowerSt)) {
+              if (['in-progress', 'in progress', 'pending'].includes(lowerSt)) {
                 rawSt = "Applied";
                 lowerSt = "applied";
               }
