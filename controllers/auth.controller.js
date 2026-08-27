@@ -108,6 +108,7 @@ export const registerBorrowerHandler = async (req, res) => {
         _id: user.id,
         name: user.name,
         email: user.email,
+        number: user.mob_no || user.number,
         role: "borrower",
       });
   } catch (err) {
@@ -252,6 +253,7 @@ export const loginHandler = async (req, res) => {
         _id: user.id,
         name: user.name,
         email: user.email,
+        number: user.mob_no || user.number,
         role,
         accessToken,
       });
