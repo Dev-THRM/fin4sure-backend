@@ -1824,7 +1824,7 @@ export const timelineActivity = async (req, res) => {
 };
 
 /* -----------------------------------------------------
-   ADMIN – LENDER INTEREST RATES HELPER (60+ Banks Constant Ordering)
+   ADMIN – LENDER INTEREST RATES HELPER (Real Database Only)
 ----------------------------------------------------- */
 export const getLenderRatesHelper = async (loanTypeShortId = 'HL') => {
   const shortIdMap = {
@@ -1837,93 +1837,71 @@ export const getLenderRatesHelper = async (loanTypeShortId = 'HL') => {
     'VL': 'vehicle',
     'vehicle': 'vehicle',
     'LAP': 'lap',
-    'lap': 'lap'
+    'lap': 'lap',
+    'education': 'education'
   };
 
   const targetCategory = shortIdMap[loanTypeShortId] || 'home';
   let loanTypeId = 1;
   try {
-    const lt = await LoanType.findOne({ where: { short_id: targetCategory } });
+    const lt = await LoanType.findOne({
+      where: {
+        [Op.or]: [
+          { short_id: targetCategory },
+          { name: { [Op.like]: `%${targetCategory}%` } }
+        ]
+      },
+      raw: true
+    });
     if (lt) loanTypeId = lt.id;
   } catch (_) {}
 
-  // Fetch all existing lenders from DB once for quick lookup
-  let dbLenders = [];
-  try {
-    dbLenders = await Lender.findAll({ raw: true });
-  } catch (_) {}
+  // Fetch all lenders directly from DB
+  const dbLenders = await Lender.findAll({ order: [['id', 'ASC']], raw: true });
 
-  const dbLenderMap = new Map();
-  dbLenders.forEach(l => {
-    dbLenderMap.set(l.name, l);
-    if (l.short) dbLenderMap.set(l.short, l);
+  // Fetch real rates for this loanTypeId directly from DB
+  const dbRates = await LenderLoanRates.findAll({
+    where: { loan_type_id: loanTypeId },
+    raw: true
   });
 
-  return await Promise.all(
-    ALL_LENDERS_DATA.map(async (bank, idx) => {
-      const dbLender = dbLenderMap.get(bank.name) || dbLenderMap.get(bank.short);
-      const lenderId = dbLender ? dbLender.id : (idx + 1);
+  const rateMap = new Map();
+  dbRates.forEach(r => {
+    if (!rateMap.has(r.lender_id)) {
+      rateMap.set(r.lender_id, { floating: null, fixed: null });
+    }
+    const entry = rateMap.get(r.lender_id);
+    if (r.rate_type === 'floating') entry.floating = r;
+    if (r.rate_type === 'fixed') entry.fixed = r;
+  });
 
-      let floatRate = null;
-      let fixedRate = null;
-      if (dbLender) {
-        try {
-          floatRate = await LenderLoanRates.findOne({
-            where: { lender_id: dbLender.id, loan_type_id: loanTypeId, rate_type: 'floating' },
-            raw: true
-          });
-          fixedRate = await LenderLoanRates.findOne({
-            where: { lender_id: dbLender.id, loan_type_id: loanTypeId, rate_type: 'fixed' },
-            raw: true
-          });
-        } catch (_) {}
-      }
+  return dbLenders.map((lender) => {
+    const rData = rateMap.get(lender.id) || {};
+    const floatRate = rData.floating;
+    const fixedRate = rData.fixed;
 
-      const defaultCategoryRates = bank.rates?.[targetCategory];
-      const defaultFlow = defaultCategoryRates ? defaultCategoryRates.f : null;
-      const defaultFix = defaultCategoryRates ? defaultCategoryRates.x : null;
+    const flowLow = floatRate?.min_rate != null ? String(floatRate.min_rate) : "N/A";
+    const flowHigh = floatRate?.max_rate != null ? String(floatRate.max_rate) : (floatRate?.min_rate != null ? String(floatRate.min_rate) : "N/A");
 
-      let flowLow = "N/A";
-      let flowHigh = "N/A";
-      if (defaultFlow === null) {
-        flowLow = "N/A";
-        flowHigh = "N/A";
-      } else if (floatRate && floatRate.min_rate !== null && floatRate.min_rate !== undefined) {
-        flowLow = String(floatRate.min_rate);
-        flowHigh = String(floatRate.max_rate || floatRate.min_rate);
-      } else if (defaultFlow && Array.isArray(defaultFlow) && defaultFlow.length === 2) {
-        flowLow = String(defaultFlow[0]);
-        flowHigh = String(defaultFlow[1]);
-      }
+    const fixLow = fixedRate?.min_rate != null ? String(fixedRate.min_rate) : "N/A";
+    const fixHigh = fixedRate?.max_rate != null ? String(fixedRate.max_rate) : (fixedRate?.min_rate != null ? String(fixedRate.min_rate) : "N/A");
 
-      let fixLow = "N/A";
-      let fixHigh = "N/A";
-      if (defaultFix === null) {
-        fixLow = "N/A";
-        fixHigh = "N/A";
-      } else if (fixedRate && fixedRate.min_rate !== null && fixedRate.min_rate !== undefined) {
-        fixLow = String(fixedRate.min_rate);
-        fixHigh = String(fixedRate.max_rate || fixedRate.min_rate);
-      } else if (defaultFix && Array.isArray(defaultFix) && defaultFix.length === 2) {
-        fixLow = String(defaultFix[0]);
-        fixHigh = String(defaultFix[1]);
-      }
-
-      return {
-        lenderId,
-        name: bank.name,
-        short: bank.short,
-        type: bank.type || (dbLender?.type ? (dbLender.type.toUpperCase() === 'PSU' ? 'PSU' : dbLender.type.toLowerCase().includes('nbfc') ? 'NBFC/HFC' : dbLender.type.toLowerCase().includes('small') ? 'SFB' : 'Private') : "Private"),
-        emoji: bank.emoji || '🏦',
-        flowLow,
-        flowHigh,
-        fixLow,
-        fixHigh,
-        offer: floatRate?.offer || fixedRate?.offer || dbLender?.offer || bank.offer || "Special interest rate offer",
-        visible: true
-      };
-    })
-  );
+    return {
+      id: lender.id,
+      lenderId: lender.id,
+      name: lender.name,
+      short: lender.short || lender.name,
+      type: lender.type ? (lender.type.toUpperCase() === 'PSU' ? 'PSU' : lender.type.toLowerCase().includes('nbfc') ? 'NBFC/HFC' : lender.type.toLowerCase().includes('small') ? 'SFB' : 'Private') : "Private",
+      emoji: '🏦',
+      flowLow,
+      flowHigh,
+      fixLow,
+      fixHigh,
+      offer: floatRate?.offer || fixedRate?.offer || lender.offer || "",
+      hasRates: flowLow !== "N/A" || fixLow !== "N/A",
+      visible: true
+    };
+  });
 };
 
 export const getLenderRates = async (req, res) => {

@@ -1,20 +1,10 @@
 import Lender from '../models/lender.js';
 import Lender_Loan_Rates from '../models/lender_loan_rates.js';
 import Loan_type from '../models/loan_type.js';
-import { ALL_LENDERS_DATA, syncAllLendersToDB } from '../services/lenderSeed.service.js';
 
 export const getLenders = async (req, res) => {
   try {
-    let lenders = await Lender.findAll({ raw: true });
-    
-    // Auto-sync master lenders if missing from database
-    if (lenders.length < ALL_LENDERS_DATA.length) {
-      try {
-        await syncAllLendersToDB();
-        lenders = await Lender.findAll({ raw: true });
-      } catch (_) {}
-    }
-
+    const lenders = await Lender.findAll({ order: [['id', 'ASC']], raw: true });
     const rates = await Lender_Loan_Rates.findAll({ raw: true });
     const loanTypes = await Loan_type.findAll({ raw: true });
 
@@ -33,27 +23,16 @@ export const getLenders = async (req, res) => {
       ratesByLender.get(r.lender_id).push(enrichedRate);
     });
 
-    const dbLenderMap = new Map();
-    lenders.forEach(l => {
-      if (l.name) dbLenderMap.set(l.name.toLowerCase().trim(), l);
-      if (l.short) dbLenderMap.set(l.short.toLowerCase().trim(), l);
-    });
-
-    // Merge with ALL_LENDERS_DATA to guarantee all institutions are returned
-    const completeLenders = ALL_LENDERS_DATA.map((bank, idx) => {
-      const dbL = dbLenderMap.get(bank.name.toLowerCase().trim()) || (bank.short ? dbLenderMap.get(bank.short.toLowerCase().trim()) : null);
-      const lenderId = dbL ? dbL.id : (idx + 1);
-      const dbRates = dbL ? (ratesByLender.get(dbL.id) || []) : [];
-
+    const completeLenders = lenders.map(l => {
+      const dbRates = ratesByLender.get(l.id) || [];
       return {
-        id: lenderId,
-        name: bank.name,
-        short: bank.short || bank.name,
-        type: bank.type || dbL?.type || 'private',
-        category: bank.category || dbL?.category || 'bank',
-        emoji: bank.emoji || '🏦',
-        logo: bank.logo || dbL?.logo || null,
-        offer: dbL?.offer || bank.offer || 'Competitive interest rates',
+        id: l.id,
+        name: l.name,
+        short: l.short || l.name,
+        type: l.type ? (l.type.toUpperCase() === 'PSU' ? 'PSU' : l.type.toLowerCase().includes('nbfc') ? 'NBFC/HFC' : l.type.toLowerCase().includes('small') ? 'SFB' : 'Private') : 'Private',
+        emoji: '🏦',
+        logo: null,
+        offer: l.offer || 'Competitive interest rates',
         loanRates: dbRates
       };
     });
