@@ -2563,6 +2563,11 @@ export const updateApplicationDocumentStatus = async (req, res) => {
       return res.status(404).json({ message: "Document not found" });
     }
     
+    // Once verified, a document cannot be rejected
+    if (doc.status === 'verified' && status === 'rejected') {
+      return res.status(400).json({ message: "Once a document is verified, it cannot be rejected." });
+    }
+    
     if (status === 'rejected') {
       try {
         const fs = await import("fs");

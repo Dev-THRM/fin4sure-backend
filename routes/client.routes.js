@@ -38,7 +38,7 @@ const uploadMiddleware = (req, res, next) => {
   upload.array('files')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ message: "File size is too large. Each file must be under 5 MB." });
+        return res.status(400).json({ message: "File size is too large. Each file must be under 1 MB." });
       }
       return res.status(400).json({ message: `Upload error: ${err.message}` });
     } else if (err) {
