@@ -16,6 +16,7 @@ import bcrypt from "bcrypt";
 import { Op } from "sequelize";
 import axios from "axios";
 import { sendWelcomeEmail } from "../utils/email.js";
+import { getCanonicalLender } from "../services/lenderSeed.service.js";
 
 // ----------------- GETTING CLIENT DETAILS OF THE PARTNER(INDIVIDUAL) -----------------
 export const getReferredClients = async (req, res) => {
@@ -317,20 +318,32 @@ export const referClient = async (req, res) => {
             lenderObj = await Lender.findByPk(parseInt(lenderItem));
           } else if (typeof lenderItem === 'string' && lenderItem.trim()) {
             const cleanName = lenderItem.trim();
+            const canonical = getCanonicalLender(cleanName);
+            const targetName = canonical ? canonical.name : cleanName;
+            const targetShort = canonical ? canonical.short : cleanName;
+            const targetType = canonical ? canonical.type : 'private';
+
             lenderObj = await Lender.findOne({
               where: {
                 [Op.or]: [
+                  { name: targetName },
+                  { short: targetShort },
                   { name: cleanName },
                   { short: cleanName }
                 ]
               }
             });
             if (!lenderObj) {
-              lenderObj = await Lender.create({
-                name: cleanName,
-                short: cleanName,
-                type: 'private'
+              const [lRecord] = await Lender.findOrCreate({
+                where: { name: targetName },
+                defaults: {
+                  name: targetName,
+                  short: targetShort,
+                  type: targetType,
+                  offer: canonical?.offer || ''
+                }
               });
+              lenderObj = lRecord;
             }
           }
 
