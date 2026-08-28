@@ -102,15 +102,50 @@ export const getMyApplications = async (req, res) => {
     const allLoanTypes = await Loan_type.findAll({ raw: true });
     const loanTypeMap = new Map(allLoanTypes.map(lt => [lt.id, lt]));
 
-    const enrichedApps = applications.map(app => {
-      const stName = statusMap.get(app.status_id) || "applied";
+    // Fetch documents for all these applications
+    const appIds = applications.map(a => a.id);
+    const appNos = applications.map(a => a.application_no).filter(Boolean);
+    const { Op } = await import("sequelize");
+    let allDocs = [];
+    if (appIds.length > 0 || appNos.length > 0) {
+      allDocs = await Document.findAll({
+        where: {
+          [Op.or]: [
+            ...(appIds.length > 0 ? [{ loan_application_id: appIds }] : []),
+            ...(appNos.length > 0 ? [{ loan_application_id: appNos }] : [])
+          ]
+        },
+        raw: true
+      });
+    }
+
+    const enrichedApps = await Promise.all(applications.map(async (app) => {
+      const appDocs = allDocs.filter(d => 
+        String(d.loan_application_id) === String(app.id) || 
+        String(d.loan_application_id) === String(app.application_no)
+      );
+      const rejectedDocs = appDocs.filter(d => d.status === 'rejected');
+      const hasRejectedDocs = rejectedDocs.length > 0;
+
+      let effectiveStatusId = app.status_id;
+      // If any document is rejected, ensure stage is reverted to Docs (status_id = 2)
+      if (hasRejectedDocs && effectiveStatusId > 2) {
+        effectiveStatusId = 2;
+        await Loan_Application.update({ status_id: 2 }, { where: { id: app.id } }).catch(() => {});
+      }
+
+      const stName = statusMap.get(effectiveStatusId) || "applied";
       const ltObj = loanTypeMap.get(app.loan_type_id) || { name: "Home Loan", short_id: "home" };
       return {
         ...app,
+        status_id: effectiveStatusId,
+        has_rejected_docs: hasRejectedDocs,
+        rejected_count: rejectedDocs.length,
+        rejected_types: rejectedDocs.map(d => d.document_type),
         Status: { name: stName },
         Loan_type: ltObj
       };
-    });
+    }));
 
     return res.json(enrichedApps);
   } catch (err) {
@@ -187,13 +222,16 @@ export const uploadDocs = async (req, res) => {
       }
     });
     const allValidTypes = allDocs.filter(d => d.status !== 'rejected').map(d => d.document_type);
-    const hasAllRequired = requiredTypes.every(t => allValidTypes.includes(t));
+    const hasRejected = allDocs.some(d => d.status === 'rejected');
+    const hasAllRequired = requiredTypes.every(t => allValidTypes.includes(t)) && !hasRejected;
 
     if (hasAllRequired) {
       app.status_id = 3; // Progress to Credit Stage
       await app.save();
       return res.json({ message: "Documents uploaded and application progressed to Credit evaluation" });
     } else {
+      app.status_id = 2; // Keep in Docs Stage
+      await app.save();
       return res.json({ message: "Partial documents saved. Please upload remaining documents." });
     }
   } catch (err) {

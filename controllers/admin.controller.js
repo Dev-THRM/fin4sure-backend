@@ -2575,6 +2575,28 @@ export const updateApplicationDocumentStatus = async (req, res) => {
           fs.unlinkSync(filePath);
         }
       } catch (_) {}
+
+      // Revert application stage to Docs (status_id = 2) so it does not stay in Credit stage
+      if (doc.loan_application_id) {
+        try {
+          const { Op } = await import("sequelize");
+          const cleanAppNo = String(doc.loan_application_id).replace(/^F4S-?/i, '').trim();
+          const app = await Loan_Application.findOne({
+            where: {
+              [Op.or]: [
+                { id: isNaN(doc.loan_application_id) ? -1 : Number(doc.loan_application_id) },
+                { application_no: cleanAppNo }
+              ]
+            }
+          });
+          if (app) {
+            app.status_id = 2; // Move back to Docs stage
+            await app.save();
+          }
+        } catch (e) {
+          console.error("Error reverting application status on doc rejection:", e);
+        }
+      }
     }
 
     await doc.update({ status });
