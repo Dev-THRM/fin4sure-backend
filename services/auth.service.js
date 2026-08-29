@@ -322,7 +322,7 @@ export const sendEmailOTPService = async (email, purposeStr = 'email_login') => 
   return { success: true };
 };
 
-export const verifyEmailOTPService = async (email, otp) => {
+export const verifyEmailOTPService = async (email, otp, shouldDestroy = true) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   // Dev bypass: '123456' or '1234' skips real verification
@@ -331,7 +331,7 @@ export const verifyEmailOTPService = async (email, otp) => {
       where: { email: normalizedEmail },
       order: [['createdAt', 'DESC']],
     });
-    if (bypass) await bypass.destroy();
+    if (bypass && shouldDestroy) await bypass.destroy();
     return true;
   }
 
@@ -353,7 +353,12 @@ export const verifyEmailOTPService = async (email, otp) => {
     throw new Error('Invalid OTP. Please try again.');
   }
 
-  await record.destroy();
+  if (shouldDestroy) {
+    await record.destroy();
+  } else {
+    await record.update({ verified_at: new Date() });
+  }
+
   return true;
 };
 
@@ -490,8 +495,8 @@ export const profileUpdateService = async (userId, updateData) => {
 export const resetPasswordService = async (email, otp, newPassword) => {
   const normalizedEmail = email.toLowerCase().trim();
   
-  // 1. Verify OTP first
-  await verifyEmailOTPService(normalizedEmail, otp);
+  // 1. Verify OTP first (and delete it)
+  await verifyEmailOTPService(normalizedEmail, otp, true);
 
   // 2. Find user
   const user = await User.findOne({ where: { email: normalizedEmail } });
@@ -502,7 +507,30 @@ export const resetPasswordService = async (email, otp, newPassword) => {
   user.password_hash = hashedPassword;
   await user.save();
 
-  return { success: true, message: "Password reset successfully" };
+  // 4. Generate token so client can auto-login
+  const accessToken = signAccessToken({
+    _id: user.id,
+    role: user.role_id,
+  });
+
+  let role = 'borrower';
+  if (user.role_id === 2) role = 'partner';
+  if (user.role_id === 3) role = 'admin';
+
+  return {
+    success: true,
+    message: "Password reset successfully.",
+    accessToken,
+    user: {
+      _id: user.id,
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      number: user.mob_no || user.number,
+      mob_no: user.mob_no || user.number,
+      role,
+    }
+  };
 };
 
 export const changePasswordService = async (userId, oldPassword, newPassword) => {

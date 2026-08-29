@@ -165,7 +165,7 @@ export const VerifyEmailOTP = async (req, res) => {
     if (!email || !otp) {
       return res.status(400).json({ message: 'Email and OTP are required.' });
     }
-    await verifyEmailOTPService(email, otp);
+    await verifyEmailOTPService(email, otp, false);
     return res.json({ success: true, message: 'OTP verified successfully.' });
   } catch (error) {
     return res.status(400).json({ message: error.message });
@@ -653,6 +653,14 @@ export const resetPasswordHandler = async (req, res) => {
       return res.status(400).json({ message: "Email, OTP, and new password are required." });
     }
     const result = await resetPasswordService(email, otp, newPassword);
+    if (result.accessToken) {
+      res.cookie('AccessToken', result.accessToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        maxAge: 24 * 60 * 60 * 1000,
+      });
+    }
     res.status(200).json(result);
   } catch (error) {
     console.error("resetPasswordHandler error:", error.message);
