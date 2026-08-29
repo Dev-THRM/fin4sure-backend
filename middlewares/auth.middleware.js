@@ -24,24 +24,27 @@ export const verifyUser = async (req, res, next) => {
 
     // decoded => { _id, role, role_id, iat, exp }
     const { _id, role, role_id } = decoded;
-    const resolvedRole = role !== undefined ? role : role_id;
+    const isAdminRole = Number(resolvedRole) === 3 || resolvedRole === "admin";
 
     let user = null;
     try {
-      user = await Admin.findByPk(_id);
-      if (!user) user = await User.findOne({ where: { email: "admin@finn4sure.com" }, raw: true });
-      if (!user) user = await User.findByPk(_id);
+      if (isAdminRole) {
+        user = await Admin.findByPk(_id);
+        if (!user) user = await User.findOne({ where: { email: "admin@finn4sure.com" }, raw: true });
+      } else {
+        user = await User.findByPk(_id);
+      }
     } catch (e) {
       console.error("User lookup error in verifyUser:", e.message);
     }
     
-    const isAdminUser = Number(resolvedRole) === 3 || resolvedRole === "admin" || (user && user.email === "admin@finn4sure.com") || (user && user.role_id === 3);
+    const isAdminUser = isAdminRole || (user && user.email === "admin@finn4sure.com") || (user && user.role_id === 3);
 
     req.user = {
       _id: user ? user.id : _id,
       id: user ? user.id : _id,
-      role: isAdminUser ? 3 : Number(resolvedRole),
-      email: user ? user.email : "admin@finn4sure.com"
+      role: isAdminUser ? 3 : (user?.role_id || Number(resolvedRole)),
+      email: user ? user.email : ""
     };
 
     next();

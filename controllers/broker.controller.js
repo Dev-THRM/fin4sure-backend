@@ -39,75 +39,115 @@ export const getReferredClients = async (req, res) => {
 // ----------------- GETTING LEADS DATA OF PARTNER(INDIVIDUAL) -----------------
 export const getBrokerLeads = async (req, res) => {
   try {
-    const id = req.user._id;
+    const id = req.user.id || req.user._id;
 
     // 2. Loan applications referred by this partner
-    const partner = await Partner.findOne({ where: { user_id: id } });
+    let partner = await Partner.findOne({ where: { user_id: id } });
+    if (!partner) {
+      // Find or create Partner record for this broker
+      const [newPartner] = await Partner.findOrCreate({
+        where: { user_id: id }
+      }).catch(() => [null]);
+      partner = newPartner;
+    }
+
     let appLeads = [];
     if (partner) {
-      const applications = await Loan_Application.findAll({
-        where: { partner_id: partner.id },
-        include: [
-          {
-            model: Loan_type,
-            as: 'loanType',
-            attributes: ['id', 'name'],
-          },
-          {
-            model: Status,
-            attributes: ['name']
-          },
-          {
-            model: Borrower,
-            include: [{
-              model: User,
-              as: 'user',
-              attributes: ['name', 'mob_no']
-            }]
-          }
-        ],
-        order: [['createdAt', 'DESC']],
-      });
+      try {
+        const applications = await Loan_Application.findAll({
+          where: { partner_id: partner.id },
+          include: [
+            {
+              model: Loan_type,
+              as: 'loanType',
+              attributes: ['id', 'name'],
+              required: false
+            },
+            {
+              model: Status,
+              attributes: ['name'],
+              required: false
+            },
+            {
+              model: Borrower,
+              required: false,
+              include: [{
+                model: User,
+                as: 'user',
+                attributes: ['name', 'mob_no'],
+                required: false
+              }]
+            }
+          ],
+          order: [['createdAt', 'DESC']],
+        });
 
-      appLeads = await Promise.all(applications.map(async (app) => {
-        let clientName = app.Borrower?.user?.name;
-        let clientPhone = app.Borrower?.user?.mob_no;
+        appLeads = await Promise.all(applications.map(async (app) => {
+          let clientName = app.Borrower?.user?.name;
+          let clientPhone = app.Borrower?.user?.mob_no;
 
-        // Fallback: If Borrower user is null, query User table directly
-        if (!clientName || !clientPhone) {
-          if (app.borrower_id) {
-            const b = await Borrower.findByPk(app.borrower_id, {
-              include: [{ model: User, as: 'user', attributes: ['name', 'mob_no'] }]
-            });
-            if (b && b.user) {
-              clientName = clientName || b.user.name;
-              clientPhone = clientPhone || b.user.mob_no;
-            } else {
-              const u = await User.findByPk(app.borrower_id, { attributes: ['name', 'mob_no'] });
-              if (u) {
-                clientName = clientName || u.name;
-                clientPhone = clientPhone || u.mob_no;
+          // Fallback: If Borrower user is null, query User table directly
+          if (!clientName || !clientPhone) {
+            if (app.borrower_id) {
+              const b = await Borrower.findByPk(app.borrower_id, {
+                include: [{ model: User, as: 'user', attributes: ['name', 'mob_no'] }]
+              }).catch(() => null);
+              if (b && b.user) {
+                clientName = clientName || b.user.name;
+                clientPhone = clientPhone || b.user.mob_no;
+              } else {
+                const u = await User.findByPk(app.borrower_id, { attributes: ['name', 'mob_no'] }).catch(() => null);
+                if (u) {
+                  clientName = clientName || u.name;
+                  clientPhone = clientPhone || u.mob_no;
+                }
               }
             }
           }
-        }
 
-        const finalName = (clientName && clientName.trim() !== 'Client') ? clientName.trim() : 'Borrower';
-        const loanTypeName = app.loanType?.name || app.loan_purpose || 'Personal Loan';
-        const finalPhone = clientPhone || '';
+          const finalName = (clientName && clientName.trim() !== 'Client') ? clientName.trim() : 'Borrower';
+          const loanTypeName = app.loanType?.name || app.loan_purpose || 'Personal Loan';
+          const finalPhone = clientPhone || '';
 
-        const titleParts = [finalName, loanTypeName];
-        if (finalPhone) titleParts.push(finalPhone);
+          const titleParts = [finalName, loanTypeName];
+          if (finalPhone) titleParts.push(finalPhone);
 
-        return {
+          return {
+            id: 'app_' + app.id,
+            appId: app.id,
+            name: titleParts.join(' - '),
+            clientName: finalName,
+            loanTypeName: loanTypeName,
+            clientPhone: finalPhone,
+            product: app.loanType?.name || 'Loan',
+            statusName: app.Status?.name?.toLowerCase() || 'applied',
+            status_id: app.status_id,
+            status: app.status_id === 2 ? 'approved' : app.status_id === 3 ? 'rejected' : 'pending',
+            createdAt: app.createdAt,
+            amount: app.loan_amount,
+            client_preference: app.client_preference,
+            source: 'application',
+            isApp: true
+          };
+        }));
+      } catch (appErr) {
+        console.error("Error with joined loan application query:", appErr.message);
+        // Fallback plain query without includes
+        const rawApps = await Loan_Application.findAll({
+          where: { partner_id: partner.id },
+          order: [['createdAt', 'DESC']],
+          raw: true
+        }).catch(() => []);
+
+        appLeads = rawApps.map(app => ({
           id: 'app_' + app.id,
           appId: app.id,
-          name: titleParts.join(' - '),
-          clientName: finalName,
-          loanTypeName: loanTypeName,
-          clientPhone: finalPhone,
-          product: app.loanType?.name || 'Loan',
-          statusName: app.Status?.name?.toLowerCase() || 'applied',
+          name: 'Borrower - ' + (app.loan_purpose || 'Loan'),
+          clientName: 'Borrower',
+          loanTypeName: app.loan_purpose || 'Loan',
+          clientPhone: '',
+          product: app.loan_purpose || 'Loan',
+          statusName: app.status_id === 2 ? 'approved' : app.status_id === 3 ? 'rejected' : 'applied',
           status_id: app.status_id,
           status: app.status_id === 2 ? 'approved' : app.status_id === 3 ? 'rejected' : 'pending',
           createdAt: app.createdAt,
@@ -115,8 +155,8 @@ export const getBrokerLeads = async (req, res) => {
           client_preference: app.client_preference,
           source: 'application',
           isApp: true
-        };
-      }));
+        }));
+      }
     }
 
     return res.json({
@@ -125,7 +165,7 @@ export const getBrokerLeads = async (req, res) => {
     });
   } catch (err) {
     console.error("Get partner leads error:", err);
-    return res.status(500).json({ message: "Internal server error", error: err.message, sql: err.original?.message });
+    return res.status(500).json({ message: "Internal server error", error: err.message });
   }
 };
 
