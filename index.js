@@ -81,9 +81,20 @@ app.use("/api/loan-types", loanTypeRouter);
 app.use("/api/webhooks", webhookRouter);
 app.use("/api/admin/scraper", scraperRouter);
 app.use("/api/location", locationRouter);
+app.use("/api/locations", locationRouter);
 
 app.get("/", (req, res) => {
   res.send("<h1>Fin4Sure Backend API is running perfectly! 🚀</h1><p>Please visit the Frontend Vercel link to view the actual website.</p>");
+});
+
+app.get("/deduplicate-lenders-now", async (req, res) => {
+  try {
+    const { cleanupAndDeduplicateLenders } = await import("./services/lenderSeed.service.js");
+    const result = await cleanupAndDeduplicateLenders(sequelize);
+    res.send(`<h1>Lender Deduplication Complete!</h1><pre>${JSON.stringify(result, null, 2)}</pre>`);
+  } catch (err) {
+    res.status(500).send("Error deduplicating lenders: " + err.message);
+  }
 });
 
 app.get("/run-scraper-now", async (req, res) => {
@@ -229,6 +240,13 @@ const startServer = async () => {
     }
 
     console.log("Database connected successfully");
+    try {
+      const { cleanupAndDeduplicateLenders } = await import("./services/lenderSeed.service.js");
+      await cleanupAndDeduplicateLenders(sequelize);
+    } catch (dedupErr) {
+      console.warn("Lender deduplication on startup notice:", dedupErr.message);
+    }
+
     try {
       const { startScraperCron } = await import("./services/scraperScheduler.service.js");
       startScraperCron("Monday");

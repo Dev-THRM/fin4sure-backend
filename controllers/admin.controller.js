@@ -17,7 +17,7 @@ import Lender_Application from "../models/lender_application.js";
 import LoanType from "../models/loan_type.js";
 import PlatformSetting from "../models/platform_settings.model.js";
 import Borrower from "../models/borrower.js";
-import { ALL_LENDERS_DATA } from "../services/lenderSeed.service.js";
+import { ALL_LENDERS_DATA, cleanupAndDeduplicateLenders, getCanonicalLender } from "../services/lenderSeed.service.js";
 
 const getBrokersList = async () => {
   try {
@@ -946,9 +946,16 @@ export const updateApplication = async (req, res) => {
     if (lender && typeof lender === 'string' && lender.trim()) {
       try {
         const cleanLenderName = lender.trim();
+        const canonical = getCanonicalLender(cleanLenderName);
+        const targetName = canonical ? canonical.name : cleanLenderName;
+        const targetShort = canonical ? canonical.short : cleanLenderName;
+        const targetType = canonical ? canonical.type : 'Private';
+
         let matchedLender = await Lender.findOne({
           where: {
             [Op.or]: [
+              { name: targetName },
+              { short: targetShort },
               { name: cleanLenderName },
               { short: cleanLenderName }
             ]
@@ -956,21 +963,16 @@ export const updateApplication = async (req, res) => {
         });
 
         if (!matchedLender) {
-          const allLenders = await Lender.findAll();
-          matchedLender = allLenders.find(l => 
-            (l.name && l.name.toLowerCase().trim() === cleanLenderName.toLowerCase()) ||
-            (l.short && l.short.toLowerCase().trim() === cleanLenderName.toLowerCase()) ||
-            (l.name && l.name.toLowerCase().includes(cleanLenderName.toLowerCase())) ||
-            (l.short && l.short.toLowerCase().includes(cleanLenderName.toLowerCase()))
-          );
-        }
-
-        if (!matchedLender) {
-          matchedLender = await Lender.create({
-            name: cleanLenderName,
-            short: cleanLenderName,
-            type: "private"
+          const [lRecord] = await Lender.findOrCreate({
+            where: { name: targetName },
+            defaults: {
+              name: targetName,
+              short: targetShort,
+              type: targetType,
+              offer: canonical?.offer || ''
+            }
           });
+          matchedLender = lRecord;
         }
 
         if (matchedLender) {
@@ -2587,5 +2589,15 @@ export const updateApplicationDocumentStatus = async (req, res) => {
   } catch (err) {
     console.error("Update document status error:", err);
     res.status(500).json({ message: "Failed to update document status" });
+  }
+};
+
+export const deduplicateLendersController = async (req, res) => {
+  try {
+    const result = await cleanupAndDeduplicateLenders(sequelize);
+    res.json(result);
+  } catch (err) {
+    console.error("Deduplicate lenders error:", err);
+    res.status(500).json({ status: "error", message: err.message });
   }
 };

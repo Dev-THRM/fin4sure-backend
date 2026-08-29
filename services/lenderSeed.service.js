@@ -732,9 +732,407 @@ export const ALL_LENDERS_DATA = [
   }
 ];
 
-export async function syncAllLendersToDB() {
+// Helper to normalize strings for robust comparison
+const normalizeStr = (str) => {
+  if (!str) return '';
+  return str.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+};
+
+// Aliases mapping non-standard names to canonical lender data
+const LENDER_ALIASES = {
+  'sbi': 'SBI',
+  'statebankofindia': 'SBI',
+  'statebank': 'SBI',
+  'hdfc': 'HDFC Bank',
+  'hdfcbank': 'HDFC Bank',
+  'icici': 'ICICI Bank',
+  'icicibank': 'ICICI Bank',
+  'axis': 'Axis Bank',
+  'axisbank': 'Axis Bank',
+  'kotak': 'Kotak Mahindra',
+  'kotakmahindrabank': 'Kotak Mahindra',
+  'kotakmahindra': 'Kotak Mahindra',
+  'bankofbaroda': 'Bank of Baroda',
+  'bob': 'Bank of Baroda',
+  'pnb': 'PNB',
+  'punjabnationalbank': 'PNB',
+  'canarabank': 'Canara Bank',
+  'canara': 'Canara Bank',
+  'bankofindia': 'Bank of India',
+  'boi': 'Bank of India',
+  'bankofmaharashtra': 'Bank of Maharashtra',
+  'bom': 'Bank of Maharashtra',
+  'unionbankofindia': 'Union Bank',
+  'unionbank': 'Union Bank',
+  'ubi': 'Union Bank',
+  'centralbankofindia': 'Central Bank of India',
+  'centralbank': 'Central Bank of India',
+  'indianbank': 'Indian Bank',
+  'indianoverseasbank': 'IOB',
+  'iob': 'IOB',
+  'ucobank': 'UCO Bank',
+  'uco': 'UCO Bank',
+  'punjabsindbank': 'Punjab & Sind',
+  'punjabandsindbank': 'Punjab & Sind',
+  'psb': 'Punjab & Sind',
+  'idbibank': 'IDBI Bank',
+  'idbi': 'IDBI Bank',
+  'indusindbank': 'IndusInd Bank',
+  'indusind': 'IndusInd Bank',
+  'yesbank': 'Yes Bank',
+  'yes': 'Yes Bank',
+  'federalbank': 'Federal Bank',
+  'federal': 'Federal Bank',
+  'idfcfirstbank': 'IDFC FIRST Bank',
+  'idfcfirst': 'IDFC FIRST Bank',
+  'idfc': 'IDFC FIRST Bank',
+  'bandhanbank': 'Bandhan Bank',
+  'bandhan': 'Bandhan Bank',
+  'rblbank': 'RBL Bank',
+  'rbl': 'RBL Bank',
+  'southindianbank': 'South Indian Bank',
+  'sib': 'South Indian Bank',
+  'karurvysyabank': 'Karur Vysya Bank',
+  'karurvysya': 'Karur Vysya Bank',
+  'kvb': 'Karur Vysya Bank',
+  'cityunionbank': 'City Union Bank',
+  'cityunion': 'City Union Bank',
+  'cub': 'City Union Bank',
+  'karnatakabank': 'Karnataka Bank',
+  'tamilnadmercantilebank': 'TMB',
+  'tamilnadmercantile': 'TMB',
+  'tmb': 'TMB',
+  'dhanlaxmibank': 'Dhanlaxmi Bank',
+  'dhanlaxmi': 'Dhanlaxmi Bank',
+  'csbbank': 'CSB Bank',
+  'csb': 'CSB Bank',
+  'dcbbank': 'DCB Bank',
+  'dcb': 'DCB Bank',
+  'jkbank': 'J&K Bank',
+  'jammukashmirbank': 'J&K Bank',
+  'nainitalbank': 'Nainital Bank',
+  'standardchartered': 'Standard Chartered',
+  'standardcharteredbank': 'Standard Chartered',
+  'hsbc': 'HSBC Bank',
+  'hsbcbank': 'HSBC Bank',
+  'citibank': 'Citibank',
+  'citi': 'Citibank',
+  'dbs': 'DBS Bank',
+  'dbsbank': 'DBS Bank',
+  'deutschebank': 'Deutsche Bank',
+  'barclays': 'Barclays',
+  'ausmallfinancebank': 'AU Small Finance',
+  'ausmallfinance': 'AU Small Finance',
+  'ausfb': 'AU Small Finance',
+  'au': 'AU Small Finance',
+  'equitassmallfinancebank': 'Equitas SFB',
+  'equitassfb': 'Equitas SFB',
+  'equitas': 'Equitas SFB',
+  'ujjivansmallfinancebank': 'Ujjivan SFB',
+  'ujjivansfb': 'Ujjivan SFB',
+  'ujjivan': 'Ujjivan SFB',
+  'janasmallfinancebank': 'Jana SFB',
+  'janasfb': 'Jana SFB',
+  'jana': 'Jana SFB',
+  'capitalsmallfinancebank': 'Capital SFB',
+  'capitalsfb': 'Capital SFB',
+  'esafsmallfinancebank': 'ESAF SFB',
+  'esafsfb': 'ESAF SFB',
+  'esaf': 'ESAF SFB',
+  'suryodaysmallfinancebank': 'Suryoday SFB',
+  'suryodaysfb': 'Suryoday SFB',
+  'suryoday': 'Suryoday SFB',
+  'utkarshsmallfinancebank': 'Utkarsh SFB',
+  'utkarshsfb': 'Utkarsh SFB',
+  'utkarsh': 'Utkarsh SFB',
+  'northeastsmallfinancebank': 'North East SFB',
+  'northeastsfb': 'North East SFB',
+  'shivaliksmallfinancebank': 'Shivalik SFB',
+  'shivaliksfb': 'Shivalik SFB',
+  'unitysmallfinancebank': 'Unity SFB',
+  'unitysfb': 'Unity SFB',
+  'fincaresmallfinancebank': 'Fincare SFB',
+  'fincaresfb': 'Fincare SFB',
+  'bajajfinserv': 'Bajaj Finserv',
+  'bajajfinance': 'Bajaj Finserv',
+  'bajaj': 'Bajaj Finserv',
+  'pnbhousing': 'PNB Housing',
+  'pnbhousingfinance': 'PNB Housing',
+  'pnbhfl': 'PNB Housing',
+  'lichousing': 'LIC Housing',
+  'lichousingfinance': 'LIC Housing',
+  'lichfl': 'LIC Housing',
+  'tatacapital': 'Tata Capital',
+  'tata': 'Tata Capital',
+  'adityabirlacapital': 'Aditya Birla',
+  'adityabirla': 'Aditya Birla',
+  'abfl': 'Aditya Birla',
+  'ltfinance': 'L&T Finance',
+  'lt': 'L&T Finance',
+  'piramalcapital': 'Piramal',
+  'piramal': 'Piramal',
+  'godrejhousingfinance': 'Godrej Housing',
+  'godrejhousing': 'Godrej Housing',
+  'godrej': 'Godrej Housing',
+  'shriramfinance': 'Shriram Finance',
+  'shriram': 'Shriram Finance',
+  'cholamandalam': 'Cholamandalam',
+  'chola': 'Cholamandalam',
+  'mahindrafinance': 'Mahindra Finance',
+  'mmfsl': 'Mahindra Finance',
+  'sundaramfinance': 'Sundaram Finance',
+  'sundaram': 'Sundaram Finance',
+  'poonawallafincorp': 'Poonawalla',
+  'poonawalla': 'Poonawalla',
+  'iiflhomefinance': 'IIFL Home Finance',
+  'iiflhome': 'IIFL Home Finance',
+  'iifl': 'IIFL Home Finance',
+  'indiabullshousingfinance': 'Indiabulls',
+  'indiabullshousing': 'Indiabulls',
+  'indiabulls': 'Indiabulls',
+  'avasfinanciers': 'Avas Financiers',
+  'avas': 'Avas Financiers',
+  'homefirstfinance': 'Home First Finance',
+  'homefirst': 'Home First Finance',
+  'aadharhousingfinance': 'Aadhar Housing',
+  'aadharhousing': 'Aadhar Housing',
+  'aadhar': 'Aadhar Housing',
+  'herofincorp': 'Hero Fincorp',
+  'hero': 'Hero Fincorp',
+  'muthootfinance': 'Muthoot Finance',
+  'muthoot': 'Muthoot Finance',
+  'manappuramfinance': 'Manappuram',
+  'manappuram': 'Manappuram',
+  'repcohomefinance': 'Repco Home Finance',
+  'repco': 'Repco Home Finance',
+  'fedbankfinancial': 'Fedbank Financial',
+  'fedfina': 'Fedbank Financial',
+  'smfgindiacredit': 'SMFG India Credit',
+  'smfg': 'SMFG India Credit',
+  'dmifinance': 'DMI Finance',
+  'dmi': 'DMI Finance',
+  'incred': 'InCred',
+  'incredprime': 'InCred',
+  'creditsaison': 'Credit Saison',
+  'krazybee': 'KrazyBee',
+  'kreditbee': 'KrazyBee',
+  'moneyview': 'Money View',
+  'navifinserv': 'Navi',
+  'navi': 'Navi',
+  'zestmoney': 'ZestMoney',
+  'cashe': 'CASHe',
+  'faircent': 'Faircent',
+  'lendbox': 'Lendbox',
+  'liquiloans': 'LiquiLoans',
+  '12club': '12% Club',
+  'iiflfinance': 'IIFL Finance',
+  'hdbfinancial': 'HDB Financial',
+  'hdb': 'HDB Financial'
+};
+
+/**
+ * Returns canonical lender data from ALL_LENDERS_DATA matching the provided string.
+ */
+export function getCanonicalLender(nameOrShort) {
+  if (!nameOrShort) return null;
+  const rawClean = nameOrShort.toString().trim();
+  const normalized = normalizeStr(rawClean);
+
+  // 1. Direct match with ALL_LENDERS_DATA
+  let matched = ALL_LENDERS_DATA.find(l => 
+    normalizeStr(l.name) === normalized ||
+    normalizeStr(l.short) === normalized
+  );
+  if (matched) return matched;
+
+  // 2. Check alias map
+  if (LENDER_ALIASES[normalized]) {
+    const canonicalName = LENDER_ALIASES[normalized];
+    matched = ALL_LENDERS_DATA.find(l => l.name === canonicalName || l.short === canonicalName);
+    if (matched) return matched;
+  }
+
+  // 3. Substring matching
+  matched = ALL_LENDERS_DATA.find(l => 
+    normalized.includes(normalizeStr(l.short)) ||
+    normalizeStr(l.name).includes(normalized) ||
+    normalized.includes(normalizeStr(l.name))
+  );
+  return matched || null;
+}
+
+/**
+ * Core deduplication logic: Merges duplicate lender rows in database,
+ * updates all foreign key references in loan_applications, lender_applications,
+ * and lender_loan_rates, then safely deletes duplicates.
+ */
+export async function cleanupAndDeduplicateLenders(sequelizeInstance) {
+  console.log('[LenderDeduplication] Starting lender deduplication & cleanup...');
+  const seq = sequelizeInstance || Lender.sequelize;
+  if (!seq) {
+    console.error('[LenderDeduplication] No sequelize instance available.');
+    return { status: 'error', message: 'No sequelize instance' };
+  }
+
+  try {
+    const [dbLenders] = await seq.query('SELECT id, name, short, type, offer FROM lenders ORDER BY id ASC;');
+    console.log(`[LenderDeduplication] Total lenders currently in DB: ${dbLenders.length}`);
+
+    // Group DB lenders by canonical key
+    const groups = new Map();
+
+    for (const row of dbLenders) {
+      const canonical = getCanonicalLender(row.name || row.short);
+      const groupKey = canonical ? canonical.name : normalizeStr(row.name || row.short || `lender_${row.id}`);
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          canonical: canonical || { name: row.name, short: row.short || row.name, type: row.type || 'Private', offer: row.offer || '' },
+          rows: []
+        });
+      }
+      groups.get(groupKey).rows.push(row);
+    }
+
+    let mergedCount = 0;
+    let deletedCount = 0;
+
+    for (const [groupKey, group] of groups.entries()) {
+      const { canonical, rows } = group;
+      if (rows.length <= 1) {
+        // Just normalize name, short, type if needed
+        const single = rows[0];
+        if (canonical && (single.name !== canonical.name || single.short !== canonical.short)) {
+          await seq.query(
+            'UPDATE lenders SET name = :name, short = :short, type = :type, offer = :offer WHERE id = :id',
+            {
+              replacements: {
+                id: single.id,
+                name: canonical.name,
+                short: canonical.short || single.short || canonical.name,
+                type: canonical.type || single.type || 'Private',
+                offer: canonical.offer || single.offer || ''
+              }
+            }
+          );
+        }
+        continue;
+      }
+
+      // We have duplicates!
+      console.log(`[LenderDeduplication] Merging ${rows.length} duplicate records for "${groupKey}":`, rows.map(r => `ID ${r.id} (${r.name})`).join(', '));
+      
+      // Select primary ID: prefer exact name match with canonical, otherwise lowest ID
+      const exactMatch = rows.find(r => r.name === canonical.name);
+      const primaryRow = exactMatch || rows[0];
+      const primaryId = primaryRow.id;
+      const dupRows = rows.filter(r => r.id !== primaryId);
+      const dupIds = dupRows.map(r => r.id);
+
+      if (dupIds.length === 0) continue;
+
+      // 1. Update loan_applications.lender_id
+      try {
+        await seq.query(
+          `UPDATE loan_applications SET lender_id = ${primaryId} WHERE lender_id IN (${dupIds.join(',')})`
+        );
+      } catch (err) {
+        console.warn(`[LenderDeduplication] Notice updating loan_applications for ${groupKey}:`, err.message);
+      }
+
+      // 2. Update lender_applications
+      // Delete any duplicate applications that already exist for (loan_application_id, primaryId)
+      try {
+        await seq.query(`
+          DELETE la_dup FROM lender_applications la_dup
+          INNER JOIN lender_applications la_primary 
+            ON la_dup.loan_application_id = la_primary.loan_application_id 
+            AND la_primary.lender_id = ${primaryId}
+          WHERE la_dup.lender_id IN (${dupIds.join(',')});
+        `);
+        // Update remaining to primaryId
+        await seq.query(`
+          UPDATE lender_applications SET lender_id = ${primaryId} WHERE lender_id IN (${dupIds.join(',')});
+        `);
+      } catch (err) {
+        console.warn(`[LenderDeduplication] Notice updating lender_applications for ${groupKey}:`, err.message);
+      }
+
+      // 3. Update lender_loan_rates
+      // Delete duplicate rates for (loan_type_id, rate_type) that already exist for primaryId
+      try {
+        await seq.query(`
+          DELETE r_dup FROM lender_loan_rates r_dup
+          INNER JOIN lender_loan_rates r_primary 
+            ON r_dup.loan_type_id = r_primary.loan_type_id 
+            AND r_dup.rate_type = r_primary.rate_type 
+            AND r_primary.lender_id = ${primaryId}
+          WHERE r_dup.lender_id IN (${dupIds.join(',')});
+        `);
+        // Move any unique rates over to primaryId
+        await seq.query(`
+          UPDATE lender_loan_rates SET lender_id = ${primaryId} WHERE lender_id IN (${dupIds.join(',')});
+        `);
+      } catch (err) {
+        console.warn(`[LenderDeduplication] Notice updating lender_loan_rates for ${groupKey}:`, err.message);
+      }
+
+      // 4. Safely delete the duplicate lender rows
+      try {
+        await seq.query(`DELETE FROM lenders WHERE id IN (${dupIds.join(',')})`);
+        deletedCount += dupIds.length;
+        mergedCount++;
+      } catch (err) {
+        console.error(`[LenderDeduplication] Failed to delete duplicate lender rows for ${groupKey}:`, err.message);
+      }
+
+      // 5. Update primary row to canonical standards
+      try {
+        await seq.query(
+          'UPDATE lenders SET name = :name, short = :short, type = :type, offer = :offer WHERE id = :id',
+          {
+            replacements: {
+              id: primaryId,
+              name: canonical.name,
+              short: canonical.short || primaryRow.short || canonical.name,
+              type: canonical.type || primaryRow.type || 'Private',
+              offer: canonical.offer || primaryRow.offer || ''
+            }
+          }
+        );
+      } catch (err) {
+        console.warn(`[LenderDeduplication] Notice updating primary lender ${primaryId}:`, err.message);
+      }
+    }
+
+    console.log(`[LenderDeduplication] Finished deduplication: Merged ${mergedCount} lender groups, deleted ${deletedCount} redundant rows.`);
+
+    // Enforce unique index on name if possible
+    try {
+      await seq.query('ALTER TABLE lenders ADD UNIQUE INDEX unique_lender_name (name);');
+      console.log('[LenderDeduplication] Added UNIQUE index on lenders(name).');
+    } catch (err) {
+      // Ignore if index already exists
+    }
+
+    return {
+      status: 'success',
+      mergedGroups: mergedCount,
+      deletedRows: deletedCount,
+      remainingCount: dbLenders.length - deletedCount
+    };
+  } catch (error) {
+    console.error('[LenderDeduplication] Error during lender deduplication:', error);
+    return { status: 'error', error: error.message };
+  }
+}
+
+export async function syncAllLendersToDB(sequelizeInstance) {
   console.log(`[LenderSeed] Syncing all ${ALL_LENDERS_DATA.length} lenders to database...`);
   try {
+    // 1. Run deduplication first to clean any messy state
+    await cleanupAndDeduplicateLenders(sequelizeInstance);
+
     const loanTypes = await Loan_type.findAll({ raw: true });
     const typeMap = {};
     loanTypes.forEach(lt => {
@@ -742,23 +1140,25 @@ export async function syncAllLendersToDB() {
     });
 
     for (const bank of ALL_LENDERS_DATA) {
-      // 1. Find or create Lender
-      const [lenderRecord] = await Lender.findOrCreate({
-        where: { name: bank.name },
-        defaults: {
+      // 1. Find or create Lender with canonical matching
+      let lenderRecord = await Lender.findOne({
+        where: { name: bank.name }
+      });
+
+      if (!lenderRecord) {
+        lenderRecord = await Lender.create({
           name: bank.name,
           short: bank.short,
           type: bank.type,
           offer: bank.offer
-        }
-      });
-
-      // Update type or offer if already existing
-      await lenderRecord.update({
-        short: bank.short,
-        type: bank.type,
-        offer: bank.offer
-      });
+        });
+      } else {
+        await lenderRecord.update({
+          short: bank.short,
+          type: bank.type,
+          offer: bank.offer
+        });
+      }
 
       // 2. Sync rates for all loan types
       const categories = ['home', 'personal', 'lap', 'business', 'vehicle'];
@@ -815,3 +1215,4 @@ export async function syncAllLendersToDB() {
     console.error("[LenderSeed] Error syncing lenders to database:", error);
   }
 }
+

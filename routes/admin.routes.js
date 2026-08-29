@@ -25,12 +25,16 @@ import {
   getScraperStatusController,
   updateScraperScheduleController,
   getApplicationDocuments,
-  updateApplicationDocumentStatus
+  updateApplicationDocumentStatus,
+  deduplicateLendersController
 } from "../controllers/admin.controller.js";
 
 import { verifyUser, isAdmin } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
+
+/* ---------- DEDUPLICATE LENDERS ---------- */
+router.all("/deduplicate-lenders", deduplicateLendersController);
 
 /* ---------- DASHBOARD SINGLE BATCH BUNDLE ---------- */
 router.get("/dashboard-bundle", verifyUser, isAdmin, getDashboardBundle);

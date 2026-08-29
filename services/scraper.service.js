@@ -1,9 +1,25 @@
+import { Op } from 'sequelize';
 import Lender from '../models/lender.js';
 import Lender_Loan_Rates from '../models/lender_loan_rates.js';
 import Loan_type from '../models/loan_type.js';
+import { getCanonicalLender } from './lenderSeed.service.js';
 
-export const getLenderByShort = async (short) => {
-  return Lender.findOne({ where: { short } });
+export const getLenderByShort = async (shortOrName) => {
+  if (!shortOrName) return null;
+  const canonical = getCanonicalLender(shortOrName);
+  const targetName = canonical ? canonical.name : shortOrName;
+  const targetShort = canonical ? canonical.short : shortOrName;
+
+  return Lender.findOne({
+    where: {
+      [Op.or]: [
+        { name: targetName },
+        { short: targetShort },
+        { name: shortOrName },
+        { short: shortOrName }
+      ]
+    }
+  });
 };
 
 export const getLoanTypeByShortId = async (shortId) => {
@@ -64,12 +80,22 @@ const getBankType = (short) => {
 export const processScrapeResults = async (lenderShort, rates) => {
   let lender = await getLenderByShort(lenderShort);
   if (!lender) {
-    console.log(`[Scraper Service] Auto-creating missing lender: ${lenderShort}`);
-    lender = await Lender.create({
-      name: lenderShort, // Placeholder name, admin can update later
-      short: lenderShort,
-      type: getBankType(lenderShort)
+    const canonical = getCanonicalLender(lenderShort);
+    const finalName = canonical ? canonical.name : lenderShort;
+    const finalShort = canonical ? canonical.short : lenderShort;
+    const finalType = canonical ? canonical.type : getBankType(lenderShort);
+
+    console.log(`[Scraper Service] Creating canonical lender: ${finalName} (${finalShort})`);
+    const [lRecord] = await Lender.findOrCreate({
+      where: { name: finalName },
+      defaults: {
+        name: finalName,
+        short: finalShort,
+        type: finalType,
+        offer: canonical?.offer || ''
+      }
     });
+    lender = lRecord;
   }
 
   let upsertedCount = 0;

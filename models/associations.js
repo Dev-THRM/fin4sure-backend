@@ -57,8 +57,9 @@ export const setupAssociations = () => {
 
   // Status relationship removed for Lender_Application since it uses ENUM now
 
-  Loan_type.hasMany(Loan_Application, { foreignKey: 'loan_type_id' });
-  Loan_Application.belongsTo(Loan_type, { foreignKey: 'loan_type_id' });
+  // Explicit alias for Loan_Application → Loan_type (used in broker referral queries)
+  Loan_Application.belongsTo(Loan_type, { foreignKey: 'loan_type_id', as: 'loanType' });
+  Loan_type.hasMany(Loan_Application, { foreignKey: 'loan_type_id', as: 'applications' });
 
   Partner.hasMany(Loan_Application, { foreignKey: 'partner_id' });
   Loan_Application.belongsTo(Partner, { foreignKey: 'partner_id' });
@@ -70,10 +71,6 @@ export const setupAssociations = () => {
 
   Status.hasMany(Loan_Application, { foreignKey: 'status_id' });
   Loan_Application.belongsTo(Status, { foreignKey: 'status_id' });
-
-  // Explicit alias for Loan_Application → Loan_type (used in broker referral queries)
-  Loan_Application.belongsTo(Loan_type, { foreignKey: 'loan_type_id', as: 'loanType' });
-  Loan_type.hasMany(Loan_Application, { foreignKey: 'loan_type_id', as: 'applications' });
 
   Loan_Application.hasMany(Document, { foreignKey: 'loan_application_id' });
   Document.belongsTo(Loan_Application, { foreignKey: 'loan_application_id' });
