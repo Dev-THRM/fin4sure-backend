@@ -216,6 +216,25 @@ export const uploadDocs = async (req, res) => {
       types = types ? [types] : [];
     }
 
+    // Ensure MySQL table column is VARCHAR(255) and repair any existing empty document_type rows
+    try {
+      const { sequelize } = await import("../config/db.js");
+      await sequelize.query("ALTER TABLE documents MODIFY COLUMN document_type VARCHAR(255) NOT NULL;");
+      await sequelize.query(`
+        UPDATE documents 
+        SET document_type = CASE 
+          WHEN LOWER(file_name) LIKE '%front%' THEN 'aadhar_front'
+          WHEN LOWER(file_name) LIKE '%back%' THEN 'aadhar_back'
+          WHEN LOWER(file_name) LIKE '%aadhar%' OR LOWER(file_name) LIKE '%aadhaar%' THEN 'aadhar'
+          WHEN LOWER(file_name) LIKE '%pan%' THEN 'pan'
+          WHEN LOWER(file_name) LIKE '%salary%' THEN 'salary slip'
+          WHEN LOWER(file_name) LIKE '%bank%' THEN 'bank statement'
+          ELSE document_type
+        END
+        WHERE document_type = '' OR document_type IS NULL OR document_type = 'other';
+      `);
+    } catch (_) {}
+
     const possibleIds = new Set();
     if (app && app.id) possibleIds.add(Number(app.id));
     if (app && app.application_no) {
@@ -304,11 +323,25 @@ export const uploadDocs = async (req, res) => {
     const allDocs = await Document.findAll({
       where: {
         loan_application_id: { [Op.in]: idList }
-      }
+      },
+      raw: true
     });
 
     const norm = (s) => String(s || '').toLowerCase().replace(/[\s_-]+/g, '').trim();
-    const allValidTypes = allDocs.filter(d => d.status !== 'rejected').map(d => norm(d.document_type));
+    const getDocType = (d) => {
+      const dt = norm(d.document_type);
+      if (dt && dt !== 'other') return dt;
+      const fn = norm(d.file_name);
+      if (fn.includes('front')) return 'aadharfront';
+      if (fn.includes('back')) return 'aadharback';
+      if (fn.includes('aadhar') || fn.includes('aadhaar')) return 'aadhar';
+      if (fn.includes('pan')) return 'pan';
+      if (fn.includes('salary')) return 'salaryslip';
+      if (fn.includes('bank')) return 'bankstatement';
+      return dt || 'other';
+    };
+
+    const allValidTypes = allDocs.filter(d => d.status !== 'rejected').map(d => getDocType(d));
     const hasRejected = allDocs.some(d => d.status === 'rejected');
 
     // Aadhaar requirement satisfied if: combined 'aadhar' exists OR both 'aadhar_front' and 'aadhar_back' exist
