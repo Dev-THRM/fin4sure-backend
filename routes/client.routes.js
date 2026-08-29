@@ -62,5 +62,7 @@ router.post("/upload-documents", verifyUser, isClientOrBroker, uploadMiddleware,
 router.post("/upload-docs", verifyUser, isClientOrBroker, uploadMiddleware, uploadDocs);
 router.post("/upload-documents/:id", verifyUser, isClientOrBroker, uploadMiddleware, uploadDocs);
 router.post("/upload-docs/:id", verifyUser, isClientOrBroker, uploadMiddleware, uploadDocs);
+router.post("/upload-docs", verifyUser, isClientOrBroker, uploadMiddleware, uploadDocs);
+router.post("/upload-documents", verifyUser, isClientOrBroker, uploadMiddleware, uploadDocs);
 
 export default router;

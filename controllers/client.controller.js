@@ -156,10 +156,7 @@ export const getMyApplications = async (req, res) => {
 
 export const uploadDocs = async (req, res) => {
   try {
-    const userId = req.user.id || req.user._id;
-    const roleId = Number(req.user.role);
     const rawId = req.params.id || req.body.application_id || req.query.application_id || req.query.id;
-    
     if (!rawId) {
       return res.status(400).json({ message: "Application ID is required" });
     }
@@ -180,20 +177,25 @@ export const uploadDocs = async (req, res) => {
       return res.status(404).json({ message: "Loan application not found" });
     }
 
-    const files = req.files;
-    if (!files || files.length === 0) {
+    const files = req.files || [];
+    if (files.length === 0) {
       return res.status(400).json({ message: "No files uploaded." });
     }
 
     const fieldMap = {
+      aadhar: 'aadhar',
+      aadharcombined: 'aadhar',
+      aadhar_combined: 'aadhar',
+      'aadhar combined': 'aadhar',
       aadharfront: 'aadhar_front',
       aadhar_front: 'aadhar_front',
       'aadhar front': 'aadhar_front',
       aadharback: 'aadhar_back',
       aadhar_back: 'aadhar_back',
       'aadhar back': 'aadhar_back',
-      aadhar: 'aadhar_front',
-      aadhaar: 'aadhar_front',
+      aadhaar: 'aadhar',
+      aadhaarcombined: 'aadhar',
+      aadhaar_combined: 'aadhar',
       aadhaarfront: 'aadhar_front',
       aadhaar_front: 'aadhar_front',
       aadhaarback: 'aadhar_back',
@@ -211,7 +213,7 @@ export const uploadDocs = async (req, res) => {
     if (!Array.isArray(types)) {
       types = types ? [types] : [];
     }
-    
+
     // Create Document records in DB (remove old ones of same type)
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -227,7 +229,7 @@ export const uploadDocs = async (req, res) => {
         const t = req.body.document_type.toLowerCase().trim();
         docType = fieldMap[t] || t;
       }
-      
+
       await Document.destroy({
         where: {
           [Op.or]: [
@@ -237,7 +239,33 @@ export const uploadDocs = async (req, res) => {
           document_type: docType
         }
       });
-      
+
+      // If uploading combined aadhar, clean up any previous front/back entries
+      if (docType === 'aadhar') {
+        await Document.destroy({
+          where: {
+            [Op.or]: [
+              { loan_application_id: app.id },
+              { loan_application_id: app.application_no }
+            ],
+            document_type: { [Op.in]: ['aadhar_front', 'aadhar_back'] }
+          }
+        });
+      }
+
+      // If uploading separate aadhar front/back, clean up any previous combined aadhar entry
+      if (docType === 'aadhar_front' || docType === 'aadhar_back') {
+        await Document.destroy({
+          where: {
+            [Op.or]: [
+              { loan_application_id: app.id },
+              { loan_application_id: app.application_no }
+            ],
+            document_type: 'aadhar'
+          }
+        });
+      }
+
       await Document.create({
         loan_application_id: app.id,
         document_type: docType,
@@ -257,25 +285,30 @@ export const uploadDocs = async (req, res) => {
       }
     });
     const allValidTypes = allDocs.filter(d => d.status !== 'rejected').map(d => d.document_type);
-    const hasAadhar = (allValidTypes.includes('aadhar_front') && allValidTypes.includes('aadhar_back')) || allValidTypes.includes('aadhar');
-    const hasPan = allValidTypes.includes('pan');
-    const hasSalarySlip = allValidTypes.includes('salary slip');
-    const hasBankStatement = allValidTypes.includes('bank statement');
     const hasRejected = allDocs.some(d => d.status === 'rejected');
-    const hasAllRequired = hasAadhar && hasPan && hasSalarySlip && hasBankStatement && !hasRejected;
+
+    // Aadhaar requirement satisfied if: combined 'aadhar' exists OR both 'aadhar_front' and 'aadhar_back' exist
+    const hasAadhaar = allValidTypes.includes('aadhar') || 
+                       allValidTypes.includes('aadhar_combined') || 
+                       (allValidTypes.includes('aadhar_front') && allValidTypes.includes('aadhar_back'));
+    const hasPan = allValidTypes.includes('pan');
+    const hasSalary = allValidTypes.includes('salary slip');
+    const hasBank = allValidTypes.includes('bank statement');
+
+    const hasAllRequired = hasAadhaar && hasPan && hasSalary && hasBank && !hasRejected;
 
     if (hasAllRequired) {
       app.status_id = 3; // Progress to Credit Stage
       await app.save();
-      return res.json({ message: "Documents uploaded and application progressed to Credit evaluation" });
+      return res.json({ success: true, message: "Documents uploaded and application progressed to Credit evaluation" });
     } else {
       app.status_id = 2; // Keep in Docs Stage
       await app.save();
-      return res.json({ message: "Partial documents saved. Please upload remaining documents." });
+      return res.json({ success: true, message: "Partial documents saved. Please upload remaining documents." });
     }
   } catch (err) {
     console.error("Upload docs error:", err);
-    return res.status(500).json({ message: "Server error during document upload", error: err.message, stack: err.stack });
+    return res.status(500).json({ message: "Server error during document upload", error: err.message });
   }
 };
 
