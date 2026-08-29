@@ -242,7 +242,19 @@ export const uploadDocs = async (req, res) => {
       let docType = 'other';
       const normField = (file.fieldname || '').toLowerCase().trim();
 
-      if (fieldMap[normField]) {
+      if (normField.includes('front')) {
+        docType = 'aadhar_front';
+      } else if (normField.includes('back')) {
+        docType = 'aadhar_back';
+      } else if (normField.includes('comb')) {
+        docType = 'aadhar';
+      } else if (normField.includes('pan')) {
+        docType = 'pan';
+      } else if (normField.includes('salary')) {
+        docType = 'salary slip';
+      } else if (normField.includes('bank')) {
+        docType = 'bank statement';
+      } else if (fieldMap[normField]) {
         docType = fieldMap[normField];
       } else if (types[i]) {
         const t = types[i].toLowerCase().trim();
