@@ -103,42 +103,75 @@ export const getMyApplications = async (req, res) => {
     const loanTypeMap = new Map(allLoanTypes.map(lt => [lt.id, lt]));
 
     // Fetch documents for all these applications
-    const appIds = applications.map(a => a.id);
-    const appNos = applications.map(a => a.application_no).filter(Boolean);
+    const appIds = applications.map(a => Number(a.id)).filter(Boolean);
+    const appNos = applications.map(a => String(a.application_no || '')).filter(Boolean);
+    const cleanNos = applications.map(a => String(a.application_no || '').replace(/^F4S-?/i, '').trim()).filter(Boolean);
+    
     const { Op } = await import("sequelize");
+    const idSet = new Set([...appIds, ...appNos, ...cleanNos]);
+    const allLookupIds = Array.from(idSet).filter(Boolean);
+
     let allDocs = [];
-    if (appIds.length > 0 || appNos.length > 0) {
+    if (allLookupIds.length > 0) {
       allDocs = await Document.findAll({
         where: {
-          [Op.or]: [
-            ...(appIds.length > 0 ? [{ loan_application_id: appIds }] : []),
-            ...(appNos.length > 0 ? [{ loan_application_id: appNos }] : [])
-          ]
+          loan_application_id: { [Op.in]: allLookupIds }
         },
         raw: true
       });
     }
 
+    const norm = (s) => String(s || '').toLowerCase().replace(/[\s_-]+/g, '').trim();
+    const getDocType = (d) => {
+      const dt = norm(d.document_type);
+      if (dt && dt !== 'other') return dt;
+      const fn = norm(d.file_name);
+      if (fn.includes('front')) return 'aadharfront';
+      if (fn.includes('back')) return 'aadharback';
+      if (fn.includes('aadhar') || fn.includes('aadhaar')) return 'aadhar';
+      if (fn.includes('pan')) return 'pan';
+      if (fn.includes('salary')) return 'salaryslip';
+      if (fn.includes('bank')) return 'bankstatement';
+      return dt || 'other';
+    };
+
     const enrichedApps = await Promise.all(applications.map(async (app) => {
+      const cleanNo = String(app.application_no || '').replace(/^F4S-?/i, '').trim();
       const appDocs = allDocs.filter(d => 
         String(d.loan_application_id) === String(app.id) || 
-        String(d.loan_application_id) === String(app.application_no)
+        String(d.loan_application_id) === String(app.application_no) ||
+        (cleanNo && String(d.loan_application_id) === String(cleanNo)) ||
+        (cleanNo && String(d.loan_application_id) === `F4S-${cleanNo}`)
       );
+
+      const validDocTypes = appDocs.filter(d => d.status !== 'rejected').map(d => getDocType(d));
       const rejectedDocs = appDocs.filter(d => d.status === 'rejected');
       const hasRejectedDocs = rejectedDocs.length > 0;
 
-      let effectiveStatusId = app.status_id;
-      // If any document is rejected, ensure stage is reverted to Docs (status_id = 2)
+      const hasAadhaar = validDocTypes.some(t => t === 'aadhar' || t === 'aadhaar' || t === 'aadharcombined' || t === 'aadhaarcombined') || 
+                         (validDocTypes.some(t => t === 'aadharfront' || t === 'aadhaarfront') && validDocTypes.some(t => t === 'aadharback' || t === 'aadhaarback'));
+      const hasPan = validDocTypes.some(t => t === 'pan');
+      const hasSalary = validDocTypes.some(t => t === 'salaryslip' || t === 'salaryslips' || t === 'salary');
+      const hasBank = validDocTypes.some(t => t === 'bankstatement' || t === 'bankstatements' || t === 'bank');
+
+      const hasAll4Required = hasAadhaar && hasPan && hasSalary && hasBank && !hasRejectedDocs;
+
+      let effectiveStatusId = Number(app.status_id || 1);
+
       if (hasRejectedDocs && effectiveStatusId > 2) {
         effectiveStatusId = 2;
         await Loan_Application.update({ status_id: 2 }, { where: { id: app.id } }).catch(() => {});
+      } else if (hasAll4Required && effectiveStatusId <= 2) {
+        effectiveStatusId = 3; // Advance to Credit Stage
+        await Loan_Application.update({ status_id: 3 }, { where: { id: app.id } }).catch(() => {});
       }
 
-      const stName = statusMap.get(effectiveStatusId) || "applied";
+      const stName = effectiveStatusId === 3 ? "Credit" : (statusMap.get(effectiveStatusId) || "applied");
       const ltObj = loanTypeMap.get(app.loan_type_id) || { name: "Home Loan", short_id: "home" };
       return {
         ...app,
         status_id: effectiveStatusId,
+        has_all_docs: hasAll4Required,
         has_rejected_docs: hasRejectedDocs,
         rejected_count: rejectedDocs.length,
         rejected_types: rejectedDocs.map(d => d.document_type),
