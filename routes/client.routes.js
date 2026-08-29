@@ -35,10 +35,10 @@ const upload = multer({
 });
 
 const uploadMiddleware = (req, res, next) => {
-  upload.array('files')(req, res, (err) => {
+  upload.any()(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ message: "File size is too large. Each file must be under 1 MB." });
+        return res.status(400).json({ message: "File size is too large. Each file must be under 15 MB." });
       }
       return res.status(400).json({ message: `Upload error: ${err.message}` });
     } else if (err) {
@@ -57,6 +57,10 @@ router.post("/apply-loan", verifyUser, isClient, applyLoan);
 router.get("/my-leads", verifyUser, isClient, getMyLeads);
 router.get("/my-applications", verifyUser, isClient, getMyApplications);
 router.get("/application-documents/:id", verifyUser, isClientOrBroker, getApplicationDocuments);
+router.get("/application-documents", verifyUser, isClientOrBroker, getApplicationDocuments);
+router.post("/upload-documents", verifyUser, isClientOrBroker, uploadMiddleware, uploadDocs);
+router.post("/upload-docs", verifyUser, isClientOrBroker, uploadMiddleware, uploadDocs);
+router.post("/upload-documents/:id", verifyUser, isClientOrBroker, uploadMiddleware, uploadDocs);
 router.post("/upload-docs/:id", verifyUser, isClientOrBroker, uploadMiddleware, uploadDocs);
 
 export default router;

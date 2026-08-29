@@ -158,7 +158,12 @@ export const uploadDocs = async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
     const roleId = Number(req.user.role);
-    const rawId = req.params.id;
+    const rawId = req.params.id || req.body.application_id || req.query.application_id || req.query.id;
+    
+    if (!rawId) {
+      return res.status(400).json({ message: "Application ID is required" });
+    }
+
     const cleanAppNo = String(rawId).replace(/^F4S-?/i, '').trim();
     const { Op } = await import("sequelize");
 
@@ -180,18 +185,38 @@ export const uploadDocs = async (req, res) => {
       return res.status(400).json({ message: "No files uploaded." });
     }
 
+    const fieldMap = {
+      aadhar: 'aadhar',
+      aadhaar: 'aadhar',
+      pan: 'pan',
+      salaryslip: 'salary slip',
+      salary_slip: 'salary slip',
+      'salary slip': 'salary slip',
+      bankstatement: 'bank statement',
+      bank_statement: 'bank statement',
+      'bank statement': 'bank statement'
+    };
+
     let types = req.body.types;
     if (!Array.isArray(types)) {
       types = types ? [types] : [];
     }
 
     const requiredTypes = ['aadhar', 'pan', 'salary slip', 'bank statement'];
-    const newUploadedTypes = types.map(t => t?.toLowerCase().trim());
     
     // Create Document records in DB (remove old ones of same type)
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const docType = newUploadedTypes[i] || 'other';
+      let docType = 'other';
+      const normField = (file.fieldname || '').toLowerCase().trim();
+
+      if (fieldMap[normField]) {
+        docType = fieldMap[normField];
+      } else if (types[i]) {
+        docType = types[i].toLowerCase().trim();
+      } else if (req.body.document_type) {
+        docType = req.body.document_type.toLowerCase().trim();
+      }
       
       await Document.destroy({
         where: {
@@ -245,15 +270,19 @@ export const uploadDocs = async (req, res) => {
 ----------------------------------------------------- */
 export const getApplicationDocuments = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { Op } = await import("sequelize");
-    const cleanAppNo = String(id).replace(/^F4S-?/i, '').trim();
+    const rawId = req.params.id || req.query.application_id || req.query.id || req.body?.application_id;
+    if (!rawId) {
+      return res.json([]);
+    }
 
-    let targetAppId = id;
+    const { Op } = await import("sequelize");
+    const cleanAppNo = String(rawId).replace(/^F4S-?/i, '').trim();
+
+    let targetAppId = rawId;
     const app = await Loan_Application.findOne({
       where: {
         [Op.or]: [
-          { id: isNaN(id) ? -1 : Number(id) },
+          { id: isNaN(rawId) ? -1 : Number(rawId) },
           { application_no: cleanAppNo }
         ]
       },
