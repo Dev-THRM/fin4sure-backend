@@ -24,6 +24,7 @@ export const verifyUser = async (req, res, next) => {
 
     // decoded => { _id, role, role_id, iat, exp }
     const { _id, role, role_id } = decoded;
+    const resolvedRole = role !== undefined ? role : role_id;
     const isAdminRole = Number(resolvedRole) === 3 || resolvedRole === "admin";
 
     let user = null;
