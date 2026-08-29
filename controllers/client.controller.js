@@ -216,8 +216,25 @@ export const uploadDocs = async (req, res) => {
       types = types ? [types] : [];
     }
 
-    // Build all possible ID identifiers for this application
-    const targetId = Number(app.id);
+    const possibleIds = new Set();
+    if (app && app.id) possibleIds.add(Number(app.id));
+    if (app && app.application_no) {
+      if (!isNaN(app.application_no)) possibleIds.add(Number(app.application_no));
+      const cleanNo = String(app.application_no).replace(/^F4S-?/i, '').trim();
+      if (!isNaN(cleanNo) && cleanNo) possibleIds.add(Number(cleanNo));
+    }
+    if (!isNaN(rawId)) possibleIds.add(Number(rawId));
+    if (!isNaN(cleanAppNo) && cleanAppNo) possibleIds.add(Number(cleanAppNo));
+
+    const idList = Array.from(possibleIds);
+
+    // Unify any older document records to current app.id
+    if (idList.length > 0) {
+      await Document.update(
+        { loan_application_id: app.id },
+        { where: { loan_application_id: { [Op.in]: idList } } }
+      );
+    }
 
     // Create Document records in DB (remove old ones of same type)
     for (let i = 0; i < files.length; i++) {
@@ -237,7 +254,7 @@ export const uploadDocs = async (req, res) => {
 
       await Document.destroy({
         where: {
-          loan_application_id: targetId,
+          loan_application_id: { [Op.in]: idList },
           document_type: docType
         }
       });
@@ -246,7 +263,7 @@ export const uploadDocs = async (req, res) => {
       if (docType === 'aadhar') {
         await Document.destroy({
           where: {
-            loan_application_id: targetId,
+            loan_application_id: { [Op.in]: idList },
             document_type: { [Op.in]: ['aadhar_front', 'aadhar_back'] }
           }
         });
@@ -256,14 +273,14 @@ export const uploadDocs = async (req, res) => {
       if (docType === 'aadhar_front' || docType === 'aadhar_back') {
         await Document.destroy({
           where: {
-            loan_application_id: targetId,
+            loan_application_id: { [Op.in]: idList },
             document_type: 'aadhar'
           }
         });
       }
 
       await Document.create({
-        loan_application_id: targetId,
+        loan_application_id: app.id,
         document_type: docType,
         file_name: file.originalname,
         file_path: `/uploads/${file.filename}`,
@@ -274,7 +291,7 @@ export const uploadDocs = async (req, res) => {
     // Check all existing valid documents
     const allDocs = await Document.findAll({
       where: {
-        loan_application_id: targetId
+        loan_application_id: { [Op.in]: idList }
       }
     });
 
@@ -292,14 +309,20 @@ export const uploadDocs = async (req, res) => {
     const hasAllRequired = hasAadhaar && hasPan && hasSalary && hasBank && !hasRejected;
 
     if (hasAllRequired) {
-      await Loan_Application.update({ status_id: 3 }, { where: { id: targetId } });
+      await Loan_Application.update(
+        { status_id: 3 }, 
+        { where: { [Op.or]: [{ id: app.id }, { application_no: cleanAppNo }, { application_no: `F4S-${cleanAppNo}` }, { application_no: rawId }] } }
+      );
       return res.json({ 
         success: true, 
         allUploaded: true, 
         message: "All compulsory documents uploaded successfully! Application progressed to Credit evaluation." 
       });
     } else {
-      await Loan_Application.update({ status_id: 2 }, { where: { id: targetId } });
+      await Loan_Application.update(
+        { status_id: 2 }, 
+        { where: { [Op.or]: [{ id: app.id }, { application_no: cleanAppNo }, { application_no: `F4S-${cleanAppNo}` }, { application_no: rawId }] } }
+      );
       return res.json({ 
         success: true, 
         allUploaded: false, 
@@ -337,11 +360,21 @@ export const getApplicationDocuments = async (req, res) => {
       raw: true
     });
 
-    const targetId = app ? Number(app.id) : (!isNaN(rawId) ? Number(rawId) : (!isNaN(cleanAppNo) ? Number(cleanAppNo) : -1));
+    const possibleIds = new Set();
+    if (app && app.id) possibleIds.add(Number(app.id));
+    if (app && app.application_no) {
+      if (!isNaN(app.application_no)) possibleIds.add(Number(app.application_no));
+      const cleanNo = String(app.application_no).replace(/^F4S-?/i, '').trim();
+      if (!isNaN(cleanNo) && cleanNo) possibleIds.add(Number(cleanNo));
+    }
+    if (!isNaN(rawId)) possibleIds.add(Number(rawId));
+    if (!isNaN(cleanAppNo) && cleanAppNo) possibleIds.add(Number(cleanAppNo));
+
+    const idList = Array.from(possibleIds);
 
     const documents = await Document.findAll({
       where: {
-        loan_application_id: targetId
+        loan_application_id: { [Op.in]: idList }
       },
       raw: true
     });
