@@ -81,6 +81,7 @@ app.use("/api/loan-types", loanTypeRouter);
 app.use("/api/webhooks", webhookRouter);
 app.use("/api/admin/scraper", scraperRouter);
 app.use("/api/location", locationRouter);
+app.use("/api/locations", locationRouter);
 
 app.get("/", (req, res) => {
   res.send("<h1>Fin4Sure Backend API is running perfectly! 🚀</h1><p>Please visit the Frontend Vercel link to view the actual website.</p>");
