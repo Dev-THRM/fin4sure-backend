@@ -2552,12 +2552,13 @@ export const updateApplicationDocumentStatus = async (req, res) => {
       try {
         const fs = await import("fs");
         const path = await import("path");
-        const { fileURLToPath } = await import("url");
-        const __filename = fileURLToPath(import.meta.url);
-        const __dirname = path.dirname(__filename);
-        const filePath = path.join(__dirname, "..", doc.file_path);
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
+        const { getUploadsDir } = await import("../utils/uploadHelper.js");
+        if (doc.file_path) {
+          const filename = path.basename(doc.file_path);
+          const persistentPath = path.join(getUploadsDir(), filename);
+          if (fs.existsSync(persistentPath)) {
+            fs.unlinkSync(persistentPath);
+          }
         }
       } catch (_) {}
 
@@ -2574,7 +2575,7 @@ export const updateApplicationDocumentStatus = async (req, res) => {
               ]
             }
           });
-          if (app) {
+          if (app && app.status_id > 2) {
             app.status_id = 2; // Move back to Docs stage
             await app.save();
           }
@@ -2585,10 +2586,10 @@ export const updateApplicationDocumentStatus = async (req, res) => {
     }
 
     await doc.update({ status });
-    res.json({ message: `Document status updated to ${status}`, doc });
+    return res.json({ message: `Document status updated to ${status}`, doc });
   } catch (err) {
     console.error("Update document status error:", err);
-    res.status(500).json({ message: "Failed to update document status" });
+    return res.status(500).json({ message: err.message || "Failed to update document status" });
   }
 };
 

@@ -7,7 +7,7 @@ const Document = sequelize.define('Document', {
     allowNull: false
   },
   document_type: {
-    type: DataTypes.ENUM('aadhar', 'pan', 'bank statement', 'salary slip'),
+    type: DataTypes.STRING,
     allowNull: false
   },
   file_name: {
@@ -19,7 +19,7 @@ const Document = sequelize.define('Document', {
     allowNull: false
   },
   status: {
-    type: DataTypes.ENUM('pending', 'verified', 'rejected'),
+    type: DataTypes.STRING,
     allowNull: false,
     defaultValue: 'pending'
   }

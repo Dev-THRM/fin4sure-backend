@@ -218,11 +218,13 @@ const startServer = async () => {
     setupAssociations();
     await sequelize.authenticate();
     
-    // Update borrowers & users ENUM/column schema automatically
+    // Update borrowers, users & documents ENUM/column schema automatically
     try {
       await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN profile_status ENUM('Active', 'Inactive', 'Completed', 'Incomplete', 'Under Review', 'Rejected') DEFAULT 'Active';");
       await sequelize.query("ALTER TABLE users MODIFY COLUMN status VARCHAR(255) DEFAULT 'active';");
       await sequelize.query("ALTER TABLE loan_applications ADD COLUMN lender_id INT NULL;");
+      await sequelize.query("ALTER TABLE documents MODIFY COLUMN status VARCHAR(50) DEFAULT 'pending';");
+      await sequelize.query("ALTER TABLE documents MODIFY COLUMN document_type VARCHAR(100) NOT NULL;");
       console.log("Database schema updated.");
     } catch (err) {
       console.log("Database schema alter notice:", err.message);

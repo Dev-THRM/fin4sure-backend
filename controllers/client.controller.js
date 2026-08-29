@@ -186,8 +186,18 @@ export const uploadDocs = async (req, res) => {
     }
 
     const fieldMap = {
-      aadhar: 'aadhar',
-      aadhaar: 'aadhar',
+      aadharfront: 'aadhar_front',
+      aadhar_front: 'aadhar_front',
+      'aadhar front': 'aadhar_front',
+      aadharback: 'aadhar_back',
+      aadhar_back: 'aadhar_back',
+      'aadhar back': 'aadhar_back',
+      aadhar: 'aadhar_front',
+      aadhaar: 'aadhar_front',
+      aadhaarfront: 'aadhar_front',
+      aadhaar_front: 'aadhar_front',
+      aadhaarback: 'aadhar_back',
+      aadhaar_back: 'aadhar_back',
       pan: 'pan',
       salaryslip: 'salary slip',
       salary_slip: 'salary slip',
@@ -201,8 +211,6 @@ export const uploadDocs = async (req, res) => {
     if (!Array.isArray(types)) {
       types = types ? [types] : [];
     }
-
-    const requiredTypes = ['aadhar', 'pan', 'salary slip', 'bank statement'];
     
     // Create Document records in DB (remove old ones of same type)
     for (let i = 0; i < files.length; i++) {
@@ -213,9 +221,11 @@ export const uploadDocs = async (req, res) => {
       if (fieldMap[normField]) {
         docType = fieldMap[normField];
       } else if (types[i]) {
-        docType = types[i].toLowerCase().trim();
+        const t = types[i].toLowerCase().trim();
+        docType = fieldMap[t] || t;
       } else if (req.body.document_type) {
-        docType = req.body.document_type.toLowerCase().trim();
+        const t = req.body.document_type.toLowerCase().trim();
+        docType = fieldMap[t] || t;
       }
       
       await Document.destroy({
@@ -247,8 +257,12 @@ export const uploadDocs = async (req, res) => {
       }
     });
     const allValidTypes = allDocs.filter(d => d.status !== 'rejected').map(d => d.document_type);
+    const hasAadhar = (allValidTypes.includes('aadhar_front') && allValidTypes.includes('aadhar_back')) || allValidTypes.includes('aadhar');
+    const hasPan = allValidTypes.includes('pan');
+    const hasSalarySlip = allValidTypes.includes('salary slip');
+    const hasBankStatement = allValidTypes.includes('bank statement');
     const hasRejected = allDocs.some(d => d.status === 'rejected');
-    const hasAllRequired = requiredTypes.every(t => allValidTypes.includes(t)) && !hasRejected;
+    const hasAllRequired = hasAadhar && hasPan && hasSalarySlip && hasBankStatement && !hasRejected;
 
     if (hasAllRequired) {
       app.status_id = 3; // Progress to Credit Stage
