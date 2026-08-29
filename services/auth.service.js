@@ -361,7 +361,7 @@ export const verifyEmailOTPService = async (email, otp) => {
  * Passwordless login via email OTP.
  * Verifies OTP then returns a signed access token — no password needed.
  */
-export const otpLoginService = async (email, otp) => {
+export const otpLoginService = async (email, otp, expectedRole) => {
   await verifyEmailOTPService(email, otp);
 
   const normalizedEmail = email.toLowerCase().trim();
