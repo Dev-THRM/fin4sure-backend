@@ -277,30 +277,29 @@ export const uploadDocs = async (req, res) => {
         loan_application_id: targetId
       }
     });
-    const allValidTypes = allDocs.filter(d => d.status !== 'rejected').map(d => d.document_type);
+
+    const norm = (s) => String(s || '').toLowerCase().replace(/[\s_-]+/g, '').trim();
+    const allValidTypes = allDocs.filter(d => d.status !== 'rejected').map(d => norm(d.document_type));
     const hasRejected = allDocs.some(d => d.status === 'rejected');
 
     // Aadhaar requirement satisfied if: combined 'aadhar' exists OR both 'aadhar_front' and 'aadhar_back' exist
-    const hasAadhaar = allValidTypes.includes('aadhar') || 
-                       allValidTypes.includes('aadhar_combined') || 
-                       (allValidTypes.includes('aadhar_front') && allValidTypes.includes('aadhar_back'));
-    const hasPan = allValidTypes.includes('pan');
-    const hasSalary = allValidTypes.includes('salary slip');
-    const hasBank = allValidTypes.includes('bank statement');
+    const hasAadhaar = allValidTypes.some(t => t === 'aadhar' || t === 'aadhaar' || t === 'aadharcombined' || t === 'aadhaarcombined') || 
+                       (allValidTypes.some(t => t === 'aadharfront' || t === 'aadhaarfront') && allValidTypes.some(t => t === 'aadharback' || t === 'aadhaarback'));
+    const hasPan = allValidTypes.some(t => t === 'pan');
+    const hasSalary = allValidTypes.some(t => t === 'salaryslip' || t === 'salaryslips' || t === 'salary');
+    const hasBank = allValidTypes.some(t => t === 'bankstatement' || t === 'bankstatements' || t === 'bank');
 
     const hasAllRequired = hasAadhaar && hasPan && hasSalary && hasBank && !hasRejected;
 
     if (hasAllRequired) {
-      app.status_id = 3; // Progress to Credit Stage
-      await app.save();
+      await Loan_Application.update({ status_id: 3 }, { where: { id: targetId } });
       return res.json({ 
         success: true, 
         allUploaded: true, 
         message: "All compulsory documents uploaded successfully! Application progressed to Credit evaluation." 
       });
     } else {
-      app.status_id = 2; // Keep in Docs Stage
-      await app.save();
+      await Loan_Application.update({ status_id: 2 }, { where: { id: targetId } });
       return res.json({ 
         success: true, 
         allUploaded: false, 
