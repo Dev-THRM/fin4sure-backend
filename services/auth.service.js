@@ -491,34 +491,18 @@ export const resetPasswordService = async (email, otp, newPassword) => {
   const normalizedEmail = email.toLowerCase().trim();
   
   // 1. Verify OTP first
-  const otpRecord = await OtpVerification.findOne({
-    where: { identifier: normalizedEmail, purpose: 'login' },
-    order: [['createdAt', 'DESC']]
-  });
-
-  if (!otpRecord) throw new Error("No OTP found. Please request a new one.");
-  
-  if (otpRecord.expiresAt < new Date()) {
-    throw new Error("OTP has expired. Please request a new one.");
-  }
-
-  const isMatch = await bcrypt.compare(otp, otpRecord.otpHash);
-  if (!isMatch) throw new Error("Invalid OTP");
+  await verifyEmailOTPService(normalizedEmail, otp);
 
   // 2. Find user
   const user = await User.findOne({ where: { email: normalizedEmail } });
   if (!user) throw new Error("User not found");
 
   // 3. Update password
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash(newPassword, salt);
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
   user.password_hash = hashedPassword;
   await user.save();
 
-  // 4. Delete OTP so it cannot be reused
-  await OtpVerification.destroy({ where: { identifier: normalizedEmail, purpose: 'login' } });
-
-  return { message: "Password reset successfully." };
+  return { success: true, message: "Password reset successfully" };
 };
 
 export const changePasswordService = async (userId, oldPassword, newPassword) => {
