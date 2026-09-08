@@ -154,14 +154,15 @@ export const getMyApplications = async (req, res) => {
       const hasSalary = validDocTypes.some(t => t === 'salaryslip' || t === 'salaryslips' || t === 'salary');
       const hasBank = validDocTypes.some(t => t === 'bankstatement' || t === 'bankstatements' || t === 'bank');
 
-      const hasAll4Required = hasAadhaar && hasPan && hasSalary && hasBank && !hasRejectedDocs;
+      // Aadhaar, PAN, and Bank Statement are mandatory; Salary Slip is optional
+      const hasAllRequired = hasAadhaar && hasPan && hasBank && !hasRejectedDocs;
 
       let effectiveStatusId = Number(app.status_id || 1);
 
       if (hasRejectedDocs && effectiveStatusId > 2) {
         effectiveStatusId = 2;
         await Loan_Application.update({ status_id: 2 }, { where: { id: app.id } }).catch(() => {});
-      } else if (hasAll4Required && effectiveStatusId <= 2) {
+      } else if (hasAllRequired && effectiveStatusId <= 2) {
         effectiveStatusId = 3; // Advance to Credit Stage
         await Loan_Application.update({ status_id: 3 }, { where: { id: app.id } }).catch(() => {});
       }
@@ -171,7 +172,7 @@ export const getMyApplications = async (req, res) => {
       return {
         ...app,
         status_id: effectiveStatusId,
-        has_all_docs: hasAll4Required,
+        has_all_docs: hasAllRequired,
         has_rejected_docs: hasRejectedDocs,
         rejected_count: rejectedDocs.length,
         rejected_types: rejectedDocs.map(d => d.document_type),
@@ -183,10 +184,13 @@ export const getMyApplications = async (req, res) => {
     return res.json(enrichedApps);
   } catch (err) {
     console.error("Get my applications error:", err);
-    return res.status(500).json({ message: "Server error", error: err.message });
+    return res.status(500).json({ message: "Server error retrieving applications", error: err.message });
   }
 };
 
+/* -----------------------------------------------------
+   CLIENT / BROKER – UPLOAD COMPULSORY DOCUMENTS
+----------------------------------------------------- */
 export const uploadDocs = async (req, res) => {
   try {
     const rawId = req.params.id || req.body.application_id || req.query.application_id || req.query.id;
@@ -381,10 +385,10 @@ export const uploadDocs = async (req, res) => {
     const hasAadhaar = allValidTypes.some(t => t === 'aadhar' || t === 'aadhaar' || t === 'aadharcombined' || t === 'aadhaarcombined') || 
                        (allValidTypes.some(t => t === 'aadharfront' || t === 'aadhaarfront') && allValidTypes.some(t => t === 'aadharback' || t === 'aadhaarback'));
     const hasPan = allValidTypes.some(t => t === 'pan');
-    const hasSalary = allValidTypes.some(t => t === 'salaryslip' || t === 'salaryslips' || t === 'salary');
     const hasBank = allValidTypes.some(t => t === 'bankstatement' || t === 'bankstatements' || t === 'bank');
 
-    const hasAllRequired = hasAadhaar && hasPan && hasSalary && hasBank && !hasRejected;
+    // Mandatory docs: Aadhaar, PAN, Bank Statement; Salary Slip is optional
+    const hasAllRequired = hasAadhaar && hasPan && hasBank && !hasRejected;
 
     if (hasAllRequired) {
       await Loan_Application.update(
@@ -394,7 +398,7 @@ export const uploadDocs = async (req, res) => {
       return res.json({ 
         success: true, 
         allUploaded: true, 
-        message: "All compulsory documents uploaded successfully! Application progressed to Credit evaluation." 
+        message: "Required documents uploaded successfully! Application progressed to Credit evaluation." 
       });
     } else {
       await Loan_Application.update(
@@ -404,7 +408,7 @@ export const uploadDocs = async (req, res) => {
       return res.json({ 
         success: true, 
         allUploaded: false, 
-        message: "Document(s) saved successfully. Please upload all 4 compulsory documents to progress to Credit." 
+        message: "Document(s) saved successfully. Please upload all required documents (Aadhaar, PAN, Bank Statement) to progress to Credit." 
       });
     }
   } catch (err) {
