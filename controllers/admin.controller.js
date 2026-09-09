@@ -2015,6 +2015,7 @@ export const getPlatformSettings = async (req, res) => {
       disbursed_stat: settingsObj.disbursed_stat || "₹100Cr+",
       borrowers_stat: settingsObj.borrowers_stat || "350+",
       partners_stat: settingsObj.partners_stat || "100+",
+      lenders_stat: settingsObj.lenders_stat || "80+",
       rating_stat: settingsObj.rating_stat || "4.8★"
     });
   } catch (err) {
