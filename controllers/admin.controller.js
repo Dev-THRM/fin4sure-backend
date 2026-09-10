@@ -676,12 +676,14 @@ export const allLeads = async (req, res) => {
         const idKey = String(row.loan_application_id);
         const st = String(row.lap_status || '').toLowerCase().trim();
 
+        // Always capture finalized_rate if it exists (latest row wins because of ORDER BY lap.id ASC)
+        if (row.finalized_rate !== null && row.finalized_rate !== undefined) {
+          appFinalizedRateMap.set(idKey, row.finalized_rate);
+        }
+
         if (st === 'active') {
           if (row.lender_name) {
             appActiveLenderMap.set(idKey, row.lender_name);
-          }
-          if (row.finalized_rate !== null && row.finalized_rate !== undefined) {
-            appFinalizedRateMap.set(idKey, row.finalized_rate);
           }
         } else if (st === 'pending') {
           if (!appPendingLendersMap.has(idKey)) {
@@ -689,10 +691,6 @@ export const allLeads = async (req, res) => {
           }
           if (!appPendingLendersMap.get(idKey).includes(row.lender_name)) {
             appPendingLendersMap.get(idKey).push(row.lender_name);
-          }
-          // Also capture finalized_rate from pending rows if no active rate exists yet
-          if (row.finalized_rate !== null && row.finalized_rate !== undefined && !appFinalizedRateMap.has(idKey)) {
-            appFinalizedRateMap.set(idKey, row.finalized_rate);
           }
         }
       });
