@@ -670,7 +670,6 @@ export const allLeads = async (req, res) => {
         FROM lender_applications lap
         LEFT JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
         LEFT JOIN lenders l ON l.id = llr.lender_id
-        WHERE l.name IS NOT NULL
         ORDER BY lap.id ASC
       `);
       lenderApps.forEach(row => {
@@ -678,7 +677,9 @@ export const allLeads = async (req, res) => {
         const st = String(row.lap_status || '').toLowerCase().trim();
 
         if (st === 'active') {
-          appActiveLenderMap.set(idKey, row.lender_name);
+          if (row.lender_name) {
+            appActiveLenderMap.set(idKey, row.lender_name);
+          }
           if (row.finalized_rate !== null && row.finalized_rate !== undefined) {
             appFinalizedRateMap.set(idKey, parseFloat(row.finalized_rate));
           }
