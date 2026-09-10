@@ -1991,18 +1991,13 @@ export const updateLenderRates = async (req, res) => {
           defaults: {
             min_rate: flowMin,
             max_rate: isNaN(flowMax) ? flowMin : flowMax,
-            offer: r.offer,
-            processing_fee: 0,
-            max_tenure: 360,
-            max_amount: 50000000,
             effective_from: new Date()
           }
         });
         if (!createdFloat) {
           await floatRate.update({
             min_rate: flowMin,
-            max_rate: isNaN(flowMax) ? flowMin : flowMax,
-            offer: r.offer
+            max_rate: isNaN(flowMax) ? flowMin : flowMax
           });
         }
       }
@@ -2015,18 +2010,13 @@ export const updateLenderRates = async (req, res) => {
           defaults: {
             min_rate: fixMin,
             max_rate: isNaN(fixMax) ? fixMin : fixMax,
-            offer: r.offer,
-            processing_fee: 0,
-            max_tenure: 360,
-            max_amount: 50000000,
             effective_from: new Date()
           }
         });
         if (!createdFixed) {
           await fixedRate.update({
             min_rate: fixMin,
-            max_rate: isNaN(fixMax) ? fixMin : fixMax,
-            offer: r.offer
+            max_rate: isNaN(fixMax) ? fixMin : fixMax
           });
         }
       }

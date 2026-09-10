@@ -91,8 +91,7 @@ export const processScrapeResults = async (lenderShort, rates) => {
       defaults: {
         name: finalName,
         short: finalShort,
-        type: finalType,
-        offer: canonical?.offer || ''
+        type: finalType
       }
     });
     lender = lRecord;

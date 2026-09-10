@@ -181,10 +181,6 @@ export async function runDirectBankScraper() {
             defaults: {
               min_rate: flowLow,
               max_rate: flowHigh,
-              offer: bank.offer || 'Special interest rate offer',
-              processing_fee: 0,
-              max_tenure: 360,
-              max_amount: 50000000,
               effective_from: new Date()
             }
           });
@@ -197,10 +193,6 @@ export async function runDirectBankScraper() {
             defaults: {
               min_rate: fixLow,
               max_rate: fixHigh,
-              offer: bank.offer || 'Special interest rate offer',
-              processing_fee: 0,
-              max_tenure: 360,
-              max_amount: 50000000,
               effective_from: new Date()
             }
           });
