@@ -94,7 +94,7 @@ const getBrokersList = async () => {
             ? 'disbursed'
             : lowerSt === 'rejected'
             ? 'rejected'
-            : lowerSt === 'pending'
+            : ['applied', 'docs', 'pending'].includes(lowerSt)
             ? 'pending'
             : 'in-progress';
 
@@ -376,7 +376,7 @@ export const userCount = async (req, res) => {
           disbursedAmount += (parseFloat(app.loan_amount) || 0);
         } else if (stName === 'rejected') {
           rejectedCount++;
-        } else if (stName === 'pending') {
+        } else if (['applied', 'docs', 'pending'].includes(stName)) {
           pendingCount++;
         } else {
           inProgressCount++;
