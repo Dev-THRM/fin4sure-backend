@@ -487,7 +487,7 @@ export const referClient = async (req, res) => {
       //   console.error("WhatsApp message failed:", waError?.response?.data || waError.message);
       // }
       // --- END old WhatsApp simulation ---
-    }
+    // }
 
     return res.status(201).json({
       success: true,
