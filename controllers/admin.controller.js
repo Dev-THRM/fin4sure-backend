@@ -690,6 +690,10 @@ export const allLeads = async (req, res) => {
           if (!appPendingLendersMap.get(idKey).includes(row.lender_name)) {
             appPendingLendersMap.get(idKey).push(row.lender_name);
           }
+          // Also capture finalized_rate from pending rows if no active rate exists yet
+          if (row.finalized_rate !== null && row.finalized_rate !== undefined && !appFinalizedRateMap.has(idKey)) {
+            appFinalizedRateMap.set(idKey, row.finalized_rate);
+          }
         }
       });
     } catch (_) {}
