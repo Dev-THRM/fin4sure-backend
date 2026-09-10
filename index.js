@@ -83,8 +83,18 @@ app.use("/api/admin/scraper", scraperRouter);
 app.use("/api/location", locationRouter);
 app.use("/api/locations", locationRouter);
 
-app.get("/", (req, res) => {
-  res.send("<h1>Fin4Sure Backend API is running perfectly! 🚀</h1><p>Please visit the Frontend Vercel link to view the actual website.</p>");
+// Serve the built React frontend from the `client/` folder
+const clientBuildPath = path.join(__dirname, "client");
+app.use(express.static(clientBuildPath));
+
+// Catch-all: send React's index.html for any non-API route (needed for React Router)
+app.get("*", (req, res) => {
+  const indexPath = path.join(clientBuildPath, "index.html");
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      res.status(200).send("<h1>Fin4Sure API is running 🚀</h1><p>Frontend build not found. Upload the <code>dist/</code> folder as <code>client/</code> in the backend root.</p>");
+    }
+  });
 });
 
 app.get("/deduplicate-lenders-now", async (req, res) => {
