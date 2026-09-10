@@ -1126,6 +1126,8 @@ export const updateApplication = async (req, res) => {
             ? 'disbursed'
             : lowerSt === 'rejected'
             ? 'rejected'
+            : ['applied', 'docs', 'pending'].includes(lowerSt)
+            ? 'pending'
             : 'in-progress';
         }
       } catch (_) {}
@@ -2172,6 +2174,8 @@ export const getDashboardBundle = async (req, res) => {
                 statusName = 'disbursed';
               } else if (lowerSt === 'rejected') {
                 statusName = 'rejected';
+              } else if (['applied', 'docs', 'pending'].includes(lowerSt)) {
+                statusName = 'pending';
               } else {
                 statusName = 'in-progress';
               }
