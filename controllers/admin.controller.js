@@ -2186,29 +2186,38 @@ export const getDashboardBundle = async (req, res) => {
         let resolvedLenderNames = [];
         let activeLenderName = null;
         let pendingLenderNames = [];
+        let appFinalRateVal = null;
 
         try {
           const [lenderRows] = await sequelize.query(`
             SELECT 
               lap.status AS lap_status,
+              lap.finalized_rate,
               COALESCE(l.name, l.short) AS lender_name
             FROM lender_applications lap
             LEFT JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
             LEFT JOIN lenders l ON l.id = llr.lender_id
-            WHERE lap.loan_application_id = ${sequelize.escape(app.id)} AND l.name IS NOT NULL
+            WHERE lap.loan_application_id = ${sequelize.escape(app.id)}
             ORDER BY lap.id ASC
           `);
 
+          let finalRateFromDb = null;
           lenderRows.forEach(r => {
             const st = String(r.lap_status || '').toLowerCase().trim();
+            if (r.finalized_rate !== null && r.finalized_rate !== undefined) {
+              finalRateFromDb = r.finalized_rate;
+            }
             if (st === 'active') {
-              activeLenderName = r.lender_name;
+              if (r.lender_name) activeLenderName = r.lender_name;
             } else if (st === 'pending') {
-              if (!pendingLenderNames.includes(r.lender_name)) {
+              if (r.lender_name && !pendingLenderNames.includes(r.lender_name)) {
                 pendingLenderNames.push(r.lender_name);
               }
             }
           });
+          if (finalRateFromDb !== null) {
+            appFinalRateVal = finalRateFromDb;
+          }
         } catch (_) {}
 
         if (activeLenderName) {
@@ -2269,6 +2278,7 @@ export const getDashboardBundle = async (req, res) => {
           lenders: resolvedLenderNames,
           all_selected_lenders: pendingLenderNames.length > 0 ? pendingLenderNames : resolvedLenderNames,
           active_lender: activeLenderName || (app.lender_id ? resolvedLenderNames[0] : null),
+          finalized_rate: appFinalRateVal,
           source: partnerName ? partnerName : "Direct",
           client_preference: app.client_preference,
           partner_id: app.partner_id,
