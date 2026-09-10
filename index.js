@@ -88,7 +88,8 @@ const clientBuildPath = path.join(__dirname, "client");
 app.use(express.static(clientBuildPath));
 
 // Catch-all: send React's index.html for any non-API route (needed for React Router)
-app.get("*", (req, res) => {
+// Note: Express 5 requires /{*path} syntax for wildcard routes
+app.get("/{*path}", (req, res) => {
   const indexPath = path.join(clientBuildPath, "index.html");
   res.sendFile(indexPath, (err) => {
     if (err) {
