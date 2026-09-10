@@ -15,7 +15,7 @@ import Lender_Application from "../models/lender_application.js";
 import bcrypt from "bcrypt";
 import { Op } from "sequelize";
 import axios from "axios";
-import { sendWelcomeEmail } from "../utils/email.js";
+import { sendWelcomeEmail, sendPartnerRoutingEmail } from "../utils/email.js";
 import { getCanonicalLender } from "../services/lenderSeed.service.js";
 
 // ----------------- GETTING CLIENT DETAILS OF THE PARTNER(INDIVIDUAL) -----------------
@@ -458,8 +458,20 @@ export const referClient = async (req, res) => {
         // Non-fatal — log and continue; application is already created
         console.error(`⚠️ Welcome email failed for ${email}:`, emailErr.message);
       }
+    } else if (clientPref === 'partner_routing' && email) {
+      // Send info email WITHOUT login credentials
+      try {
+        const partnerUser = partner ? await User.findByPk(partner.user_id) : null;
+        const partnerName = partnerUser ? partnerUser.name : 'your partner';
+        await sendPartnerRoutingEmail(email, name, partnerName, loanType?.name || loanType, loan_amount);
+        console.log(`✅ Partner routing info email dispatched to ${email}`);
+      } catch (emailErr) {
+        // Non-fatal — log and continue
+        console.error(`⚠️ Partner routing info email failed for ${email}:`, emailErr.message);
+      }
+    }
 
-      // --- OLD WhatsApp simulation (commented out) ---
+    // --- OLD WhatsApp simulation (commented out) ---
       // console.log(`[WHATSAPP SIMULATION] Message to 91${number}`);
       // console.log(`Your Fin4Sure account has been created.\nUsername: ${email}\nPassword: Password@12`);
       //

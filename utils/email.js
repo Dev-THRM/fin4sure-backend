@@ -199,3 +199,92 @@ export const sendWelcomeEmail = async (toEmail, name, password, partnerName = 'y
   }
 };
 
+/**
+ * Send an info email to a borrower when a partner applies for a loan on their behalf (partner_routing)
+ * @param {string} toEmail      - Borrower's email
+ * @param {string} name         - Borrower's name
+ * @param {string} partnerName  - Referring partner's name
+ * @param {string} loanType     - Loan type name (e.g., Home Loan)
+ * @param {number} loanAmount   - Loan amount applied for
+ */
+export const sendPartnerRoutingEmail = async (toEmail, name, partnerName = 'a partner', loanType = 'Loan', loanAmount = null) => {
+  const mailOptions = {
+    from: `"Finn4Sure" <${process.env.GMAIL_USER}>`,
+    to: toEmail,
+    subject: `Update on your ${loanType} Application — Finn4Sure`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+        </head>
+        <body style="margin:0;padding:0;background:#f4f7fb;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+            <tr>
+              <td align="center">
+                <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);overflow:hidden;">
+                  <!-- Header -->
+                  <tr>
+                    <td style="background:linear-gradient(135deg,#0f3460 0%,#16a085 100%);padding:32px 40px;text-align:center;">
+                      <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:-0.5px;">Finn4Sure</h1>
+                      <p style="margin:6px 0 0;color:rgba(255,255,255,0.8);font-size:13px;">Secure Financial Services</p>
+                    </td>
+                  </tr>
+                  <!-- Body -->
+                  <tr>
+                    <td style="padding:40px 40px 32px;">
+                      <p style="margin:0 0 8px;color:#0f3460;font-size:18px;font-weight:600;">Hello ${name},</p>
+                      <p style="margin:0 0 24px;color:#64748b;font-size:14px;line-height:1.6;">
+                        You have been referred by <strong>${partnerName}</strong> for a <strong>${loanType}</strong> application through Finn4Sure.
+                      </p>
+
+                      <!-- Loan Application Details -->
+                      <div style="background:#fefce8;border:2px solid #fde68a;border-radius:12px;padding:20px;margin-bottom:24px;">
+                        <p style="margin:0 0 12px;color:#92400e;font-size:14px;font-weight:700;">📋 Application Summary</p>
+                        <table cellpadding="0" cellspacing="0" width="100%">
+                          <tr>
+                            <td style="color:#78350f;font-size:13px;padding:5px 0;width:130px;">Referred by</td>
+                            <td style="color:#1c1917;font-size:13px;font-weight:600;padding:5px 0;">${partnerName}</td>
+                          </tr>
+                          <tr>
+                            <td style="color:#78350f;font-size:13px;padding:5px 0;">Loan Type</td>
+                            <td style="color:#1c1917;font-size:13px;font-weight:600;padding:5px 0;">${loanType}</td>
+                          </tr>
+                          ${loanAmount ? `<tr>
+                            <td style="color:#78350f;font-size:13px;padding:5px 0;">Loan Amount</td>
+                            <td style="color:#1c1917;font-size:13px;font-weight:600;padding:5px 0;">₹${Number(loanAmount).toLocaleString('en-IN')}</td>
+                          </tr>` : ''}
+                        </table>
+                      </div>
+
+                      <p style="margin:0;color:#94a3b8;font-size:13px;line-height:1.6;font-weight:600;">
+                        If you did not want this loan or did not authorize this application, please contact <span style="color:#b91c1c;">9910507574</span>.
+                      </p>
+                    </td>
+                  </tr>
+                  <!-- Footer -->
+                  <tr>
+                    <td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0;text-align:center;">
+                      <p style="margin:0;color:#94a3b8;font-size:11px;">© ${new Date().getFullYear()} Finn4Sure. All rights reserved.</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+    `,
+  };
+
+  try {
+    const transport = getTransporter();
+    const info = await transport.sendMail(mailOptions);
+    console.log(`✅ Partner routing info email sent to ${toEmail} | Message ID: ${info.messageId}`);
+    return info;
+  } catch (err) {
+    console.error('❌ Gmail SMTP error sending partner routing info email:', err.message);
+    throw new Error(`Failed to send partner routing info email: ${err.message}`);
+  }
+};
