@@ -150,7 +150,8 @@ export const SendEmailOTP = async (req, res) => {
     return res.json({ success: true, message: 'OTP sent to your email address.' });
   } catch (error) {
     console.error('Error sending email OTP:', error);
-    return res.status(500).json({ message: error.message || 'Failed to send OTP email.' });
+    const status = ['No account found with this email address.', 'Inactive partner', 'Account inactive'].includes(error.message) ? 400 : 500;
+    return res.status(status).json({ message: error.message || 'Failed to send OTP email.' });
   }
 };
 
@@ -264,7 +265,7 @@ export const loginHandler = async (req, res) => {
       });
   } catch (err) {
     console.error("Login error:", err);
-    if (err.message === "Invalid credentials" || err.message.includes("do you want to register?")) {
+    if (["Invalid credentials", "Inactive partner", "Account inactive"].includes(err.message) || err.message.includes("do you want to register?")) {
       return res.status(401).json({ message: err.message });
     }
     return res.status(500).json({ message: "Internal server error" });

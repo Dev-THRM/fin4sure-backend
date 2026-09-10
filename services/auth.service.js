@@ -296,10 +296,17 @@ export const sendEmailOTPService = async (email, purposeStr = 'email_login') => 
   const normalizedEmail = email.toLowerCase().trim();
 
   // If this is for login, make sure the user actually exists
-  if (purposeStr === 'login') {
+  if (purposeStr === 'login' || purposeStr === 'email_login') {
     const user = await User.findOne({ where: { email: normalizedEmail } });
     if (!user) {
       throw new Error('No account found with this email address.');
+    }
+    if (user.status && user.status.toLowerCase() === 'inactive') {
+      if (user.role_id === 2) {
+        throw new Error('Inactive partner');
+      } else {
+        throw new Error('Account inactive');
+      }
     }
   }
 
@@ -376,6 +383,14 @@ export const otpLoginService = async (email, otp, expectedRole) => {
     throw new Error('No account found with this email address.');
   }
 
+  if (user.status && user.status.toLowerCase() === 'inactive') {
+    if (user.role_id === 2) {
+      throw new Error('Inactive partner');
+    } else {
+      throw new Error('Account inactive');
+    }
+  }
+
   if (expectedRole) {
     const roleId = expectedRole === 'partner' ? 2 : (expectedRole === 'admin' ? 3 : 1);
     if (user.role_id !== roleId) {
@@ -432,6 +447,14 @@ export const loginService = async (email, password, expectedRole) => {
   const user = await User.findOne({ where: { email: normalizedEmail } });
   if (!user) {
     throw new Error("Invalid credentials");
+  }
+
+  if (user.status && user.status.toLowerCase() === 'inactive') {
+    if (user.role_id === 2) {
+      throw new Error('Inactive partner');
+    } else {
+      throw new Error('Account inactive');
+    }
   }
 
   if (expectedRole) {
