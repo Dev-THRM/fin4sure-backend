@@ -681,7 +681,7 @@ export const allLeads = async (req, res) => {
             appActiveLenderMap.set(idKey, row.lender_name);
           }
           if (row.finalized_rate !== null && row.finalized_rate !== undefined) {
-            appFinalizedRateMap.set(idKey, parseFloat(row.finalized_rate));
+            appFinalizedRateMap.set(idKey, row.finalized_rate);
           }
         } else if (st === 'pending') {
           if (!appPendingLendersMap.has(idKey)) {
