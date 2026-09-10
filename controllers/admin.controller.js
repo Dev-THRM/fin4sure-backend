@@ -729,6 +729,8 @@ export const allLeads = async (req, res) => {
         normalizedStatus = 'rejected';
       } else if (['disbursed', 'completed'].includes(lowerSt)) {
         normalizedStatus = 'disbursed';
+      } else if (['applied', 'docs', 'pending'].includes(lowerSt)) {
+        normalizedStatus = 'pending';
       } else {
         normalizedStatus = 'in-progress';
       }
