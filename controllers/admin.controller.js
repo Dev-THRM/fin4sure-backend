@@ -657,13 +657,15 @@ export const allLeads = async (req, res) => {
     `);
 
     // Fetch all lender applications for multiple lenders per loan, tracking active vs pending/inactive status
-    const appActiveLenderMap = new Map();
+    const appActiveLenderMap = new Map();   // appId -> lender_name
+    const appFinalizedRateMap = new Map();  // appId -> finalized_rate (for active lender app)
     const appPendingLendersMap = new Map();
     try {
       const [lenderApps] = await sequelize.query(`
         SELECT 
           lap.loan_application_id,
           lap.status AS lap_status,
+          lap.finalized_rate,
           COALESCE(l.name, l.short) AS lender_name
         FROM lender_applications lap
         LEFT JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
@@ -677,6 +679,9 @@ export const allLeads = async (req, res) => {
 
         if (st === 'active') {
           appActiveLenderMap.set(idKey, row.lender_name);
+          if (row.finalized_rate !== null && row.finalized_rate !== undefined) {
+            appFinalizedRateMap.set(idKey, parseFloat(row.finalized_rate));
+          }
         } else if (st === 'pending') {
           if (!appPendingLendersMap.has(idKey)) {
             appPendingLendersMap.set(idKey, []);
@@ -773,6 +778,7 @@ export const allLeads = async (req, res) => {
         lenders: resolvedLenderNames,
         all_selected_lenders: appPendingLendersMap.get(appIdKey) || resolvedLenderNames,
         active_lender: appActiveLenderMap.get(appIdKey) || app.direct_lender_name || null,
+        finalized_rate: appFinalizedRateMap.has(appIdKey) ? appFinalizedRateMap.get(appIdKey) : null,
         source: app.partner_name || "Direct",
         client_preference: app.client_preference,
         partner_id: app.partner_id,
@@ -905,7 +911,7 @@ export const updateLeadStatus = async (req, res) => {
 export const updateApplication = async (req, res) => {
   try {
     const id = req.body?.id || req.params?.id;
-    const { status, stage, name, lender, loan_amount, tenure, loan_purpose, remark } = req.body;
+    const { status, stage, name, lender, loan_amount, tenure, loan_purpose, remark, finalized_rate } = req.body;
 
     const app = await Loan_Application.findByPk(id);
     if (!app) return res.status(404).json({ message: "Application not found" });
@@ -1006,15 +1012,24 @@ export const updateApplication = async (req, res) => {
               { replacements: { appId: app.id, rateId: rateObj.id } }
             );
 
+            // Prepare finalized_rate value (null means not yet set)
+            const finalRateVal = (finalized_rate !== undefined && finalized_rate !== null && finalized_rate !== '') 
+              ? parseFloat(finalized_rate) 
+              : null;
+
             if (existingRows && existingRows.length > 0) {
+              // Update status to active; also persist finalized_rate if provided
+              const updateFields = finalRateVal !== null
+                ? `status = 'active', finalized_rate = :finalRate, updatedAt = NOW()`
+                : `status = 'active', updatedAt = NOW()`;
               await sequelize.query(
-                `UPDATE lender_applications SET status = 'active', updatedAt = NOW() WHERE id = :id`,
-                { replacements: { id: existingRows[0].id } }
+                `UPDATE lender_applications SET ${updateFields} WHERE id = :id`,
+                { replacements: { id: existingRows[0].id, finalRate: finalRateVal } }
               );
             } else {
               await sequelize.query(
-                `INSERT INTO lender_applications (loan_application_id, lender_rate_id, status, createdAt, updatedAt) VALUES (:appId, :rateId, 'active', NOW(), NOW())`,
-                { replacements: { appId: app.id, rateId: rateObj.id } }
+                `INSERT INTO lender_applications (loan_application_id, lender_rate_id, status, finalized_rate, createdAt, updatedAt) VALUES (:appId, :rateId, 'active', :finalRate, NOW(), NOW())`,
+                { replacements: { appId: app.id, rateId: rateObj.id, finalRate: finalRateVal } }
               );
             }
           }
@@ -1027,6 +1042,19 @@ export const updateApplication = async (req, res) => {
         const lObj = await Lender.findByPk(app.lender_id, { raw: true });
         if (lObj) finalLenderName = lObj.name || lObj.short || "SBI";
       } catch (_) {}
+
+      // If no lender was changed but finalized_rate was provided, update the active lender_application row
+      if (finalized_rate !== undefined && finalized_rate !== null && finalized_rate !== '') {
+        const finalRateVal = parseFloat(finalized_rate);
+        if (!isNaN(finalRateVal)) {
+          try {
+            await sequelize.query(
+              `UPDATE lender_applications SET finalized_rate = :finalRate, updatedAt = NOW() WHERE loan_application_id = :appId AND status = 'active' LIMIT 1`,
+              { replacements: { finalRate: finalRateVal, appId: app.id } }
+            );
+          } catch (_) {}
+        }
+      }
     }
 
     // 3. Update borrower/user name if provided
@@ -1101,6 +1129,18 @@ export const updateApplication = async (req, res) => {
       ? (String(app.application_no).startsWith('F4S') ? app.application_no : `F4S-${app.application_no}`) 
       : `F4S-${2000 + app.id}`;
 
+    // Fetch the persisted finalized_rate from the active lender application row
+    let persistedFinalizedRate = null;
+    try {
+      const [frRows] = await sequelize.query(
+        `SELECT finalized_rate FROM lender_applications WHERE loan_application_id = :appId AND status = 'active' ORDER BY updatedAt DESC LIMIT 1`,
+        { replacements: { appId: app.id } }
+      );
+      if (frRows && frRows.length > 0 && frRows[0].finalized_rate !== null) {
+        persistedFinalizedRate = parseFloat(frRows[0].finalized_rate);
+      }
+    } catch (_) {}
+
     return res.json({
       id: app.id,
       application_no: formattedAppNo,
@@ -1111,6 +1151,7 @@ export const updateApplication = async (req, res) => {
       status: finalStatusName,
       stage: finalStageName,
       lender: finalLenderName,
+      finalized_rate: persistedFinalizedRate,
       loan_amount: app.loan_amount,
       tenure: app.tenure,
       loan_purpose: app.loan_purpose,

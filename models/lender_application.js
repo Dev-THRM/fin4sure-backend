@@ -14,6 +14,12 @@ const Lender_Application = sequelize.define('Lender_Application', {
     type: DataTypes.ENUM('active', 'pending', 'inactive'),
     allowNull: false,
     defaultValue: 'pending'
+  },
+  finalized_rate: {
+    type: DataTypes.DECIMAL(6, 2),
+    allowNull: true,
+    defaultValue: null,
+    comment: 'The finalized interest rate (%) agreed with the lender. Stored here because lender_loan_rates only tracks min/max range.'
   }
 }, {
   tableName: 'lender_applications',
