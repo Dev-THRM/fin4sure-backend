@@ -1044,13 +1044,14 @@ export const updateApplication = async (req, res) => {
         if (lObj) finalLenderName = lObj.name || lObj.short || "SBI";
       } catch (_) {}
 
-      // If no lender was changed but finalized_rate was provided, update the active lender_application row
+      // If no lender was changed but finalized_rate was provided, update the most recent lender_application row
+      // and promote it to 'active' so it appears in the fetch query (broker-created rows start as 'pending')
       if (finalized_rate !== undefined && finalized_rate !== null && finalized_rate !== '') {
         const finalRateVal = parseFloat(finalized_rate);
         if (!isNaN(finalRateVal)) {
           try {
             await sequelize.query(
-              `UPDATE lender_applications SET finalized_rate = :finalRate, updatedAt = NOW() WHERE loan_application_id = :appId AND status = 'active' LIMIT 1`,
+              `UPDATE lender_applications SET finalized_rate = :finalRate, status = 'active', updatedAt = NOW() WHERE loan_application_id = :appId ORDER BY updatedAt DESC LIMIT 1`,
               { replacements: { finalRate: finalRateVal, appId: app.id } }
             );
           } catch (_) {}
