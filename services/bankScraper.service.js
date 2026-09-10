@@ -170,8 +170,23 @@ export async function runDirectBankScraper() {
         } catch (_) {}
       }
 
-      // Upsert into LenderLoanRates if lender exists in DB
-      const lenderId = dbLenders[bank.name] || dbLenders[bank.short];
+      // Upsert into LenderLoanRates if lender exists in DB, or create it
+      let lenderId = dbLenders[bank.name] || dbLenders[bank.short];
+      if (!lenderId) {
+        try {
+          const [lRecord] = await Lender.findOrCreate({
+            where: { name: bank.name },
+            defaults: {
+              name: bank.name,
+              short: bank.short || bank.name,
+              type: bank.type || 'Private'
+            }
+          });
+          lenderId = lRecord.id;
+          dbLenders[bank.name] = lenderId;
+          if (bank.short) dbLenders[bank.short] = lenderId;
+        } catch (_) {}
+      }
       const loanTypeId = loanTypes[cat] || (cat === 'home' ? 1 : cat === 'personal' ? 2 : cat === 'business' ? 3 : cat === 'vehicle' ? 4 : 5);
 
       if (lenderId && loanTypeId) {
