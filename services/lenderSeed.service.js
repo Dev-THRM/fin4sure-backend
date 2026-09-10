@@ -975,7 +975,7 @@ export async function cleanupAndDeduplicateLenders(sequelizeInstance) {
   }
 
   try {
-    const [dbLenders] = await seq.query('SELECT id, name, short, type, offer FROM lenders ORDER BY id ASC;');
+    const [dbLenders] = await seq.query('SELECT id, name, short, type FROM lenders ORDER BY id ASC;');
     console.log(`[LenderDeduplication] Total lenders currently in DB: ${dbLenders.length}`);
 
     // Group DB lenders by canonical key
