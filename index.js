@@ -69,6 +69,8 @@ app.get("/uploads/:filename", (req, res) => {
 });
 
 app.use("/uploads", express.static(getUploadsDir()));
+app.use("/uploads", express.static("/home/u628156753/uploads"));
+app.use("/uploads", express.static("/home/u628156753/public_html/uploads"));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Routes

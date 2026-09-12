@@ -13,22 +13,26 @@ export function getUploadsDir() {
     return process.env.UPLOADS_DIR;
   }
 
-  // Check persistent Hostinger paths first so files persist across Git rebuilds
+  // Try persistent Hostinger paths. Use recursive mkdir so we don't need to
+  // check whether the parent exists first — this handles symlink layouts too.
   const persistentCandidates = [
-    "/home/u628156753/nodejs/uploads",
-    "/home/u628156753/public_html/uploads"
+    "/home/u628156753/uploads",          // most stable — lives outside public_html and nodejs app dir
+    "/home/u628156753/public_html/uploads", // always persistent, served by Apache if needed
+    "/home/u628156753/nodejs/uploads",   // may work when nodejs symlink resolves
   ];
 
   for (const candidate of persistentCandidates) {
     try {
-      const parentDir = path.dirname(candidate);
-      if (fs.existsSync(parentDir)) {
-        if (!fs.existsSync(candidate)) {
-          fs.mkdirSync(candidate, { recursive: true });
-        }
-        return candidate;
-      }
-    } catch (_) {}
+      fs.mkdirSync(candidate, { recursive: true });
+      // Verify we can actually write here
+      const testFile = path.join(candidate, ".write_test");
+      fs.writeFileSync(testFile, "ok");
+      fs.unlinkSync(testFile);
+      console.log("=== Persistent uploads dir in use:", candidate, "===");
+      return candidate;
+    } catch (_) {
+      // This path isn't writable or reachable — try next
+    }
   }
 
   // Default fallback to local project uploads folder
@@ -36,6 +40,7 @@ export function getUploadsDir() {
   if (!fs.existsSync(localUploads)) {
     try { fs.mkdirSync(localUploads, { recursive: true }); } catch (_) {}
   }
+  console.warn("=== WARNING: Falling back to local uploads dir (not persistent on Hostinger):", localUploads, "===");
   return localUploads;
 }
 
@@ -43,10 +48,11 @@ export function findFileInAllUploadLocations(filename) {
   const cleanFilename = path.basename(filename);
   const candidatePaths = [
     path.join(getUploadsDir(), cleanFilename),
+    path.join("/home/u628156753/uploads", cleanFilename),          // most stable persistent dir
+    path.join("/home/u628156753/public_html/uploads", cleanFilename),
+    path.join("/home/u628156753/nodejs/uploads", cleanFilename),
     path.resolve(__dirname, "../uploads", cleanFilename),
     path.resolve(__dirname, "../../uploads", cleanFilename),
-    path.join("/home/u628156753/nodejs/uploads", cleanFilename),
-    path.join("/home/u628156753/public_html/uploads", cleanFilename)
   ];
 
   // Dynamic discovery across all Hostinger version build directories
