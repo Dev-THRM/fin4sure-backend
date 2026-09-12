@@ -6,14 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export function getUploadsDir() {
-  if (process.env.UPLOADS_DIR) {
-    if (!fs.existsSync(process.env.UPLOADS_DIR)) {
-      try { fs.mkdirSync(process.env.UPLOADS_DIR, { recursive: true }); } catch (_) {}
-    }
-    return process.env.UPLOADS_DIR;
-  }
-
-  // Try persistent Hostinger paths. Use recursive mkdir so we don't need to
+  // Try persistent Hostinger paths FIRST. Use recursive mkdir so we don't need to
   // check whether the parent exists first — this handles symlink layouts too.
   const persistentCandidates = [
     "/home/u628156753/public_html/uploads", // Make this first so user can see files in File Manager
@@ -34,6 +27,15 @@ export function getUploadsDir() {
       // This path isn't writable or reachable — try next
     }
   }
+
+  // If Hostinger paths fail, try environment variable
+  if (process.env.UPLOADS_DIR) {
+    if (!fs.existsSync(process.env.UPLOADS_DIR)) {
+      try { fs.mkdirSync(process.env.UPLOADS_DIR, { recursive: true }); } catch (_) {}
+    }
+    return process.env.UPLOADS_DIR;
+  }
+
 
   // Default fallback to local project uploads folder
   const localUploads = path.resolve(__dirname, "../uploads");
