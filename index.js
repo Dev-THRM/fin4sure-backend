@@ -348,6 +348,20 @@ const startServer = async () => {
     }
 
     console.log("Database connected successfully");
+
+    // One-time migration: update support phone number to 9217624627
+    try {
+      await sequelize.query(
+        "UPDATE relationship_managers SET mob = '9217624627' WHERE mob IN ('9910507574', '1800-123-4567', '18001234567')"
+      );
+      await sequelize.query(
+        "INSERT INTO platform_settings (`key`, `value`) VALUES ('support_phone', '9217624627') ON DUPLICATE KEY UPDATE `value` = '9217624627'"
+      );
+      console.log("Support phone number updated to 9217624627.");
+    } catch (err) {
+      console.log("Phone migration notice:", err.message);
+    }
+
     try {
       const { cleanupAndDeduplicateLenders } = await import("./services/lenderSeed.service.js");
       await cleanupAndDeduplicateLenders(sequelize);
