@@ -22,6 +22,7 @@ const __dirname = path.dirname(__filename);
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadDir = getUploadsDir();
+    console.log("=== UPLOAD DESTINATION RESOLVED TO:", uploadDir, "===");
     cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
