@@ -35,6 +35,17 @@ const upload = multer({
   limits: { fileSize: 15 * 1024 * 1024 } // 15MB limit
 });
 
+app.get('/debug-uploads', (req, res) => {
+  const dir = getUploadsDir();
+  const fs = require('fs'); // or import if ESM
+  try {
+    const files = fs.readdirSync(dir);
+    res.json({ resolvedDir: dir, files, cwd: process.cwd() });
+  } catch (err) {
+    res.json({ resolvedDir: dir, error: err.message, cwd: process.cwd() });
+  }
+});
+
 const uploadMiddleware = (req, res, next) => {
   upload.any()(req, res, (err) => {
     if (err instanceof multer.MulterError) {
