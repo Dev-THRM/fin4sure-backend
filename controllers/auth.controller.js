@@ -362,7 +362,7 @@ export const profileHandler = async (req, res) => {
         _id: user ? user.id : user_id,
         name: user ? user.name : "Admin",
         email: user ? user.email : "admin@finn4sure.com",
-        number: user ? user.number : "9910507574",
+        number: user ? user.number : "9217624627",
         role: "admin"
       });
     }
@@ -578,7 +578,7 @@ export const adminLoginHandler = async (req, res) => {
       admin = await Admin.create({
         name: "Admin",
         email: "admin@finn4sure.com",
-        number: "9910507574",
+        number: "9217624627",
         password: "finn@admin2026", // Will be hashed via hook
         sessionStatus: "Active",
         lastLogin: new Date()

@@ -259,7 +259,7 @@ export const sendPartnerRoutingEmail = async (toEmail, name, partnerName = 'a pa
                       </div>
 
                       <p style="margin:0;color:#94a3b8;font-size:13px;line-height:1.6;font-weight:600;">
-                        If you did not want this loan or did not authorize this application, please contact <span style="color:#b91c1c;">9910507574</span>.
+                        If you did not want this loan or did not authorize this application, please contact <span style="color:#b91c1c;">9217624627</span>.
                       </p>
                     </td>
                   </tr>
