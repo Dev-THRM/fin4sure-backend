@@ -16,8 +16,8 @@ export function getUploadsDir() {
   // Try persistent Hostinger paths. Use recursive mkdir so we don't need to
   // check whether the parent exists first — this handles symlink layouts too.
   const persistentCandidates = [
+    "/home/u628156753/public_html/uploads", // Make this first so user can see files in File Manager
     "/home/u628156753/uploads",          // most stable — lives outside public_html and nodejs app dir
-    "/home/u628156753/public_html/uploads", // always persistent, served by Apache if needed
     "/home/u628156753/nodejs/uploads",   // may work when nodejs symlink resolves
   ];
 
