@@ -218,6 +218,52 @@ app.get("/check-uploads", async (req, res) => {
   }
 });
 
+// Diagnose real canonical paths — resolves symlinks so we know the TRUE disk location
+app.get("/diagnose-paths", async (req, res) => {
+  try {
+    const fs = await import("fs");
+    const uploadsDir = getUploadsDir();
+
+    // Resolve canonical (real) path — follows symlinks
+    let realUploadsPath = uploadsDir;
+    try { realUploadsPath = fs.realpathSync(uploadsDir); } catch (_) {}
+
+    let realDirname = __dirname;
+    try { realDirname = fs.realpathSync(__dirname); } catch (_) {}
+
+    // Write a test file so user can find it in File Manager
+    const testFilePath = path.join(uploadsDir, "FIND_ME.txt");
+    try {
+      fs.writeFileSync(testFilePath, `If you can see this file in the File Manager, the real path is:\n${realUploadsPath}\n\nWritten at: ${new Date().toISOString()}`);
+    } catch (e) {}
+
+    // List home directory structure to find where File Manager root is
+    let homeContents = [];
+    try { homeContents = fs.readdirSync("/home/u628156753"); } catch (_) {}
+
+    let publicHtmlContents = [];
+    try { publicHtmlContents = fs.readdirSync("/home/u628156753/public_html"); } catch (_) {}
+
+    let domainsContents = [];
+    try { domainsContents = fs.readdirSync("/home/u628156753/domains"); } catch (_) {}
+
+    res.json({
+      UPLOADS_DIR_ENV: process.env.UPLOADS_DIR || "(not set)",
+      resolvedUploadsDir: uploadsDir,
+      REAL_canonical_path: realUploadsPath,
+      filesInUploadsDir: (() => { try { return fs.readdirSync(uploadsDir); } catch (_) { return []; } })(),
+      testFileWrittenAt: testFilePath,
+      appDirname: __dirname,
+      REAL_appDirname: realDirname,
+      homeContents,
+      publicHtmlContents,
+      domainsContents,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 8000;
 
 // Start HTTP server immediately so Hostinger proxy binds the port without timing out
