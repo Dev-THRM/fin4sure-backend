@@ -219,7 +219,7 @@ app.get("/check-uploads", async (req, res) => {
 });
 
 // Diagnose real canonical paths — resolves symlinks so we know the TRUE disk location
-app.get("/diagnose-paths", async (req, res) => {
+app.get("/api/diagnose-paths", async (req, res) => {
   try {
     const fs = await import("fs");
     const uploadsDir = getUploadsDir();
