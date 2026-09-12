@@ -123,7 +123,7 @@ export const getPublicSettings = async (req, res) => {
       });
     }
 
-    const phoneVal = (rm && rm.mob) ? rm.mob : (settingsObj.support_phone || "1800-123-4567");
+    const phoneVal = (rm && rm.mob) ? rm.mob : (settingsObj.support_phone || "9217-624-627");
 
     return res.status(200).json({
       success: true,
@@ -137,7 +137,7 @@ export const getPublicSettings = async (req, res) => {
       success: true,
       announcement_banner: "",
       roi_disclaimer: "",
-      support_phone: "1800-123-4567"
+      support_phone: "9217-624-627"
     });
   }
 };
