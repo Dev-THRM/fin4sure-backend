@@ -35,7 +35,7 @@ const upload = multer({
   limits: { fileSize: 15 * 1024 * 1024 } // 15MB limit
 });
 
-app.get('/debug-uploads', (req, res) => {
+router.get('/debug-uploads', (req, res) => {
   const dir = getUploadsDir();
   const fs = require('fs'); // or import if ESM
   try {
