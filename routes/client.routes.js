@@ -35,14 +35,29 @@ const upload = multer({
   limits: { fileSize: 15 * 1024 * 1024 } // 15MB limit
 });
 
+console.log("=== UPLOADS_DIR ENV on startup:", process.env.UPLOADS_DIR || "(not set)", "===");
+console.log("=== Resolved uploads dir on startup:", getUploadsDir(), "===");
+
+// Diagnostic route: no auth so we can verify live server state easily
 router.get('/debug-uploads', (req, res) => {
   const dir = getUploadsDir();
-  const fs = require('fs'); // or import if ESM
   try {
     const files = fs.readdirSync(dir);
-    res.json({ resolvedDir: dir, files, cwd: process.cwd() });
+    res.json({
+      resolvedDir: dir,
+      files,
+      cwd: process.cwd(),
+      UPLOADS_DIR_ENV: process.env.UPLOADS_DIR || '(not set)',
+      dirname: __dirname
+    });
   } catch (err) {
-    res.json({ resolvedDir: dir, error: err.message, cwd: process.cwd() });
+    res.json({
+      resolvedDir: dir,
+      error: err.message,
+      cwd: process.cwd(),
+      UPLOADS_DIR_ENV: process.env.UPLOADS_DIR || '(not set)',
+      dirname: __dirname
+    });
   }
 });
 
