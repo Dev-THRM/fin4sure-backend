@@ -100,19 +100,20 @@ export const registerBorrowerService = async (data) => {
   const transaction = await sequelize.transaction();
 
   try {
-    if (existingUser) {
-      throw new Error("User already exists with this email or mobile number.");
+    let targetUser = existingUser;
+    if (!targetUser) {
+      const hashedPassword = await bcrypt.hash(password || "Pass@1234", 10);
+      targetUser = await User.create({
+        name: name || "Borrower",
+        email: normalizedEmail,
+        mob_no: number,
+        password_hash: hashedPassword,
+        role_id: 1, // Borrower role
+        status: 'active'
+      }, { transaction });
+    } else if (name && !existingUser.name) {
+      await existingUser.update({ name }, { transaction });
     }
-
-    const hashedPassword = await bcrypt.hash(password || "Pass@1234", 10);
-    const targetUser = await User.create({
-      name,
-      email: normalizedEmail,
-      mob_no: number,
-      password_hash: hashedPassword,
-      role_id: 1, // Borrower role
-      status: 'active'
-    }, { transaction });
 
     let pincodeRecord = null;
     if (pincode) {
