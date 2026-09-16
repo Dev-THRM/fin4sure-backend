@@ -27,15 +27,16 @@ export const signUpService = async (data) => {
   const { name, email, number, password, role_id, dob, address, state, district, pincode, city, broker_id } = data;
 
   const normalizedEmail = email.toLowerCase().trim();
+  const cleanMobile = (number || "").trim();
 
-  const existingUser = await User.findOne({
-    where: {
-      [Op.or]: [{ mob_no: number }, { email: normalizedEmail }]
-    }
-  });
+  const userByEmail = await User.findOne({ where: { email: normalizedEmail } });
+  if (userByEmail) {
+    throw new Error("This email is already registered. Please sign in instead.");
+  }
 
-  if (existingUser) {
-    throw new Error("User already exists");
+  const userByMobile = cleanMobile ? await User.findOne({ where: { mob_no: cleanMobile } }) : null;
+  if (userByMobile) {
+    throw new Error("This mobile number is already registered. Please sign in instead.");
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -43,7 +44,7 @@ export const signUpService = async (data) => {
   const newUser = await User.create({
     name,
     email: normalizedEmail,
-    mob_no: number,
+    mob_no: cleanMobile,
     password_hash: hashedPassword,
     role_id,
     status: 'active'
@@ -58,25 +59,40 @@ export const signUpService = async (data) => {
     // 1. Find or create State
     const [stateObj] = await State.findOrCreate({
       where: { name: stateName },
-      defaults: { country: "India" }
+      defaults: { country: "India" },
     });
 
     // 2. Find or create District
     const [districtObj] = await District.findOrCreate({
       where: { name: districtName },
-      defaults: { state_id: stateObj.id }
+      defaults: { state_id: stateObj.id },
     });
 
     // 3. Find or create City
     const [cityObj] = await City.findOrCreate({
       where: { name: cityName },
-      defaults: { district_id: districtObj.id }
+      defaults: { district_id: districtObj.id },
     });
 
-    // 4. Create Partner
+    // 4. Find or create Pincode
+    let pincodeRecord = null;
+    if (pincode) {
+      pincodeRecord = await Pincode.findOne({
+        where: { code: pincode, city_id: cityObj.id },
+      });
+      if (!pincodeRecord) {
+        pincodeRecord = await Pincode.create({
+          code: pincode,
+          city_id: cityObj.id,
+        });
+      }
+    }
+
     await Partner.create({
       user_id: newUser.id,
-      city_id: cityObj.id
+      pincode_id: pincodeRecord ? pincodeRecord.id : null,
+      address,
+      status: "Inactive", // Requires Admin Approval
     });
   } else if (role_id === 1) {
     // Borrower role (User already created)
@@ -90,12 +106,36 @@ export const registerBorrowerService = async (data) => {
   const { name, email, number, dob, gender, address, pincode, state, district, password, loanAmount, tenure, loanPurpose, loanType, selectedLenders, broker_id } = data;
 
   const normalizedEmail = email.toLowerCase().trim();
+  const cleanMobile = (number || "").trim();
 
-  let existingUser = await User.findOne({
-    where: {
-      [Op.or]: [{ mob_no: number }, { email: normalizedEmail }]
-    }
+  // 1. Check if email is already registered
+  const existingUserByEmail = await User.findOne({
+    where: { email: normalizedEmail }
   });
+
+  // 2. Check if mobile is already registered
+  const existingUserByMobile = cleanMobile ? await User.findOne({
+    where: { mob_no: cleanMobile }
+  }) : null;
+
+  // If email is already registered to a different user, block registration!
+  if (existingUserByEmail && existingUserByMobile && existingUserByEmail.id !== existingUserByMobile.id) {
+    throw new Error("This email is already registered to another account. Please use your registered phone number or log in.");
+  }
+
+  if (existingUserByEmail && !existingUserByMobile) {
+    if (existingUserByEmail.mob_no && cleanMobile && existingUserByEmail.mob_no !== cleanMobile) {
+      throw new Error("This email is already registered to another account. Please use your registered phone number or log in.");
+    }
+  }
+
+  if (!existingUserByEmail && existingUserByMobile) {
+    if (existingUserByMobile.email && existingUserByMobile.email !== normalizedEmail) {
+      throw new Error("This mobile number is already registered with a different email address.");
+    }
+  }
+
+  let existingUser = existingUserByEmail || existingUserByMobile;
 
   const transaction = await sequelize.transaction();
 
@@ -106,7 +146,7 @@ export const registerBorrowerService = async (data) => {
       targetUser = await User.create({
         name: name || "Borrower",
         email: normalizedEmail,
-        mob_no: number,
+        mob_no: cleanMobile,
         password_hash: hashedPassword,
         role_id: 1, // Borrower role
         status: 'active'
@@ -293,7 +333,7 @@ export const sendOTPService = async (number) => {
 // EMAIL OTP SERVICES  (uses Resend; mob_no column left untouched for mobile OTP)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const sendEmailOTPService = async (email, purposeStr = 'email_login') => {
+export const sendEmailOTPService = async (email, purposeStr = 'email_login', mobileNumber = null) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   // If this is for login, make sure the user actually exists
@@ -308,6 +348,24 @@ export const sendEmailOTPService = async (email, purposeStr = 'email_login') => 
       } else {
         throw new Error('Account inactive');
       }
+    }
+  }
+
+  // If this is for general signup, disallow if email is already registered
+  if (purposeStr === 'signup') {
+    const user = await User.findOne({ where: { email: normalizedEmail } });
+    if (user) {
+      throw new Error('This email address is already registered. Please sign in instead.');
+    }
+  }
+
+  // If this is for borrower registration onboarding with a mobile number,
+  // verify if the email is already registered to another mobile number
+  if (purposeStr === 'registration' && mobileNumber) {
+    const cleanMobile = mobileNumber.trim();
+    const existing = await User.findOne({ where: { email: normalizedEmail } });
+    if (existing && existing.mob_no && existing.mob_no !== cleanMobile) {
+      throw new Error('This email address is already registered to another account. Please use your registered phone number or log in.');
     }
   }
 

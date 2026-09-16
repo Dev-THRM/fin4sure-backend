@@ -3,7 +3,11 @@ import { sequelize } from '../config/db.js';
 
 const User = sequelize.define('User', {
   name: DataTypes.STRING,
-  email: DataTypes.STRING,
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true
+  },
   password_hash: DataTypes.STRING,
   mob_no: DataTypes.STRING,
   role_id: DataTypes.INTEGER,

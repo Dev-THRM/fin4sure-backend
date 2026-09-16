@@ -45,6 +45,13 @@ const connectDB = async () => {
     } catch (err) {
       // Safe to ignore if already modified
     }
+
+    try {
+      await sequelize.query("ALTER TABLE users ADD UNIQUE (email);");
+      console.log("Migration: Added unique constraint to users.email");
+    } catch (err) {
+      // Safe to ignore if unique index already exists
+    }
   } catch (error) {
     console.error(`MySQL connection error: ${error.message}`);
   }

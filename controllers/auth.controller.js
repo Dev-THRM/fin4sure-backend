@@ -142,15 +142,20 @@ export const SendOTP = async (req, res) => {
  */
 export const SendEmailOTP = async (req, res) => {
   try {
-    const { email, purpose } = req.body;
+    const { email, purpose, number } = req.body;
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ message: 'A valid email address is required.' });
     }
-    await sendEmailOTPService(email, purpose);
+    await sendEmailOTPService(email, purpose, number);
     return res.json({ success: true, message: 'OTP sent to your email address.' });
   } catch (error) {
     console.error('Error sending email OTP:', error);
-    const status = ['No account found with this email address.', 'Inactive partner', 'Account inactive'].includes(error.message) ? 400 : 500;
+    const isClientError = [
+      'No account found with this email address.',
+      'Inactive partner',
+      'Account inactive'
+    ].includes(error.message) || error.message.includes('already registered') || error.message.includes('another account');
+    const status = isClientError ? 400 : 500;
     return res.status(status).json({ message: error.message || 'Failed to send OTP email.' });
   }
 };
