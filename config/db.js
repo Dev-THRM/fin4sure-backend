@@ -34,6 +34,17 @@ const connectDB = async () => {
     } catch (err) {
       // Safe to ignore
     }
+
+    try {
+      await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN dob DATE NULL;");
+      await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN gender ENUM('male', 'female', 'other') NULL;");
+      await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN address VARCHAR(255) NULL;");
+      await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN pincode_id INT NULL;");
+      await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN profile_status ENUM('Active', 'Inactive', 'Completed', 'Incomplete', 'Under Review', 'Rejected') DEFAULT 'Active' NULL;");
+      console.log("Migration: Updated borrowers fields to nullable");
+    } catch (err) {
+      // Safe to ignore if already modified
+    }
   } catch (error) {
     console.error(`MySQL connection error: ${error.message}`);
   }
