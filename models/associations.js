@@ -72,6 +72,10 @@ export const setupAssociations = () => {
   Status.hasMany(Loan_Application, { foreignKey: 'status_id' });
   Loan_Application.belongsTo(Status, { foreignKey: 'status_id' });
 
+  // User to Document Associations (Canonical connection)
+  User.hasMany(Document, { foreignKey: 'user_id', as: 'documents' });
+  Document.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
   Loan_Application.hasMany(Document, { foreignKey: 'loan_application_id' });
   Document.belongsTo(Loan_Application, { foreignKey: 'loan_application_id' });
 };

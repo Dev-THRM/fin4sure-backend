@@ -112,10 +112,13 @@ export const getMyApplications = async (req, res) => {
     const allLookupIds = Array.from(idSet).filter(Boolean);
 
     let allDocs = [];
-    if (allLookupIds.length > 0) {
+    if (allLookupIds.length > 0 || userId) {
       allDocs = await Document.findAll({
         where: {
-          loan_application_id: { [Op.in]: allLookupIds }
+          [Op.or]: [
+            ...(userId ? [{ user_id: userId }] : []),
+            ...(allLookupIds.length > 0 ? [{ loan_application_id: { [Op.in]: allLookupIds } }] : [])
+          ]
         },
         raw: true
       });
@@ -173,7 +176,7 @@ export const getMyApplications = async (req, res) => {
       return dt || 'other';
     };
 
-    // Check if borrower already has the 3 required documents across any applications
+    // Check if borrower already has the 3 required documents across any applications / user profile
     const borrowerValidDocs = allDocs.filter(d => d.status !== 'rejected');
     const borrowerDocTypes = borrowerValidDocs.map(d => getDocType(d));
     const borrowerHasAadhaar = borrowerDocTypes.some(t => t === 'aadhar' || t === 'aadhaar' || t === 'aadharcombined' || t === 'aadhaarcombined' || t.includes('aadhar') || t.includes('aadhaar')) || 
@@ -185,6 +188,7 @@ export const getMyApplications = async (req, res) => {
     const enrichedApps = await Promise.all(applications.map(async (app) => {
       const cleanNo = String(app.application_no || '').replace(/^F4S-?/i, '').trim();
       let appDocs = allDocs.filter(d => 
+        (userId && d.user_id && Number(d.user_id) === Number(userId)) ||
         String(d.loan_application_id) === String(app.id) || 
         String(d.loan_application_id) === String(app.application_no) ||
         (cleanNo && String(d.loan_application_id) === String(cleanNo)) ||
@@ -192,7 +196,7 @@ export const getMyApplications = async (req, res) => {
       );
 
       // If a new loan application doesn't have documents uploaded specifically for it yet,
-      // inherit the borrower's existing 3 documents (aadhar, pan, bank statement)
+      // inherit the user/borrower's existing 3 documents (aadhar, pan, bank statement)
       if (appDocs.length === 0 && borrowerHasThreeDocs) {
         appDocs = borrowerValidDocs;
       }
@@ -305,6 +309,15 @@ export const uploadDocs = async (req, res) => {
       return res.status(404).json({ message: "Loan application not found" });
     }
 
+    // Resolve user_id from token or via borrower association
+    let resolvedUserId = req.user?.id || req.user?._id || null;
+    if (!resolvedUserId && app && app.borrower_id) {
+      const borrower = await Borrower.findByPk(app.borrower_id, { raw: true });
+      if (borrower && borrower.user_id) {
+        resolvedUserId = borrower.user_id;
+      }
+    }
+
     const files = req.files || [];
     if (files.length === 0) {
       return res.status(400).json({ message: "No files uploaded." });
@@ -373,11 +386,20 @@ export const uploadDocs = async (req, res) => {
 
     const idList = Array.from(possibleIds);
 
-    // Unify any older document records to current app.id
+    // Unify any older document records to current app.id and resolvedUserId
     if (idList.length > 0) {
       await Document.update(
-        { loan_application_id: app.id },
+        { 
+          loan_application_id: app.id,
+          ...(resolvedUserId ? { user_id: resolvedUserId } : {})
+        },
         { where: { loan_application_id: { [Op.in]: idList } } }
+      );
+    }
+    if (resolvedUserId) {
+      await Document.update(
+        { user_id: resolvedUserId },
+        { where: { loan_application_id: app.id, user_id: null } }
       );
     }
 
@@ -411,8 +433,11 @@ export const uploadDocs = async (req, res) => {
 
       await Document.destroy({
         where: {
-          loan_application_id: { [Op.in]: idList },
-          document_type: docType
+          document_type: docType,
+          [Op.or]: [
+            ...(resolvedUserId ? [{ user_id: resolvedUserId }] : []),
+            { loan_application_id: { [Op.in]: idList } }
+          ]
         }
       });
 
@@ -420,8 +445,11 @@ export const uploadDocs = async (req, res) => {
       if (docType === 'aadhar') {
         await Document.destroy({
           where: {
-            loan_application_id: { [Op.in]: idList },
-            document_type: { [Op.in]: ['aadhar_front', 'aadhar_back'] }
+            document_type: { [Op.in]: ['aadhar_front', 'aadhar_back'] },
+            [Op.or]: [
+              ...(resolvedUserId ? [{ user_id: resolvedUserId }] : []),
+              { loan_application_id: { [Op.in]: idList } }
+            ]
           }
         });
       }
@@ -430,13 +458,17 @@ export const uploadDocs = async (req, res) => {
       if (docType === 'aadhar_front' || docType === 'aadhar_back') {
         await Document.destroy({
           where: {
-            loan_application_id: { [Op.in]: idList },
-            document_type: 'aadhar'
+            document_type: 'aadhar',
+            [Op.or]: [
+              ...(resolvedUserId ? [{ user_id: resolvedUserId }] : []),
+              { loan_application_id: { [Op.in]: idList } }
+            ]
           }
         });
       }
 
       await Document.create({
+        user_id: resolvedUserId,
         loan_application_id: app.id,
         document_type: docType,
         file_name: file.originalname,
@@ -445,10 +477,13 @@ export const uploadDocs = async (req, res) => {
       });
     }
 
-    // Check all existing valid documents
+    // Check all existing valid documents for this user / application
     const allDocs = await Document.findAll({
       where: {
-        loan_application_id: { [Op.in]: idList }
+        [Op.or]: [
+          ...(resolvedUserId ? [{ user_id: resolvedUserId }] : []),
+          { loan_application_id: { [Op.in]: idList } }
+        ]
       },
       raw: true
     });
@@ -531,6 +566,12 @@ export const getApplicationDocuments = async (req, res) => {
       raw: true
     });
 
+    let resolvedUserId = req.user?.id || req.user?._id || null;
+    if (!resolvedUserId && app && app.borrower_id) {
+      const b = await Borrower.findByPk(app.borrower_id, { raw: true });
+      if (b && b.user_id) resolvedUserId = b.user_id;
+    }
+
     const possibleIds = new Set();
     if (app && app.id) possibleIds.add(Number(app.id));
     if (app && app.application_no) {
@@ -545,7 +586,10 @@ export const getApplicationDocuments = async (req, res) => {
 
     const documents = await Document.findAll({
       where: {
-        loan_application_id: { [Op.in]: idList }
+        [Op.or]: [
+          ...(resolvedUserId ? [{ user_id: resolvedUserId }] : []),
+          ...(idList.length > 0 ? [{ loan_application_id: { [Op.in]: idList } }] : [])
+        ]
       },
       raw: true
     });

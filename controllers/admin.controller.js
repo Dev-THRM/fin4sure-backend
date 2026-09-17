@@ -2643,13 +2643,21 @@ export const getApplicationDocuments = async (req, res) => {
       raw: true
     });
 
+    let resolvedUserId = null;
     if (app) {
       targetAppId = app.id;
+      if (app.borrower_id) {
+        const borrower = await Borrower.findByPk(app.borrower_id, { raw: true });
+        if (borrower && borrower.user_id) {
+          resolvedUserId = borrower.user_id;
+        }
+      }
     }
 
     const documents = await Document.findAll({
       where: {
         [Op.or]: [
+          ...(resolvedUserId ? [{ user_id: resolvedUserId }] : []),
           { loan_application_id: targetAppId },
           ...(app ? [{ loan_application_id: app.application_no }] : [])
         ]
@@ -2700,25 +2708,29 @@ export const updateApplicationDocumentStatus = async (req, res) => {
       } catch (_) {}
 
       // Revert application stage to Docs (status_id = 2) so it does not stay in Credit stage
-      if (doc.loan_application_id) {
-        try {
-          const { Op } = await import("sequelize");
+      try {
+        const { Op } = await import("sequelize");
+        let appWhere = [];
+        if (doc.loan_application_id) {
           const cleanAppNo = String(doc.loan_application_id).replace(/^F4S-?/i, '').trim();
-          const app = await Loan_Application.findOne({
-            where: {
-              [Op.or]: [
-                { id: isNaN(doc.loan_application_id) ? -1 : Number(doc.loan_application_id) },
-                { application_no: cleanAppNo }
-              ]
-            }
-          });
-          if (app && app.status_id > 2) {
-            app.status_id = 2; // Move back to Docs stage
-            await app.save();
-          }
-        } catch (e) {
-          console.error("Error reverting application status on doc rejection:", e);
+          appWhere.push({ id: isNaN(doc.loan_application_id) ? -1 : Number(doc.loan_application_id) });
+          appWhere.push({ application_no: cleanAppNo });
         }
+        if (doc.user_id) {
+          const borrowers = await Borrower.findAll({ where: { user_id: doc.user_id }, attributes: ['id'], raw: true });
+          const bIds = borrowers.map(b => b.id);
+          if (bIds.length > 0) {
+            appWhere.push({ borrower_id: { [Op.in]: bIds } });
+          }
+        }
+        if (appWhere.length > 0) {
+          await Loan_Application.update(
+            { status_id: 2 },
+            { where: { [Op.or]: appWhere, status_id: { [Op.gt]: 2 } } }
+          );
+        }
+      } catch (e) {
+        console.error("Error reverting application status on doc rejection:", e);
       }
     }
 

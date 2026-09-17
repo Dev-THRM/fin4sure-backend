@@ -356,6 +356,34 @@ const startServer = async () => {
       await sequelize.query("ALTER TABLE loan_applications ADD COLUMN lender_id INT NULL;");
       await sequelize.query("ALTER TABLE documents MODIFY COLUMN status VARCHAR(50) DEFAULT 'pending';");
       await sequelize.query("ALTER TABLE documents MODIFY COLUMN document_type VARCHAR(255) NOT NULL;");
+      
+      // Ensure documents table has user_id column and nullable loan_application_id
+      try {
+        await sequelize.query("ALTER TABLE documents ADD COLUMN user_id INT NULL AFTER id;");
+        console.log("documents.user_id column added.");
+      } catch (colErr) {
+        if (!colErr.message.includes('Duplicate column') && !colErr.message.includes('already exists')) {
+          console.log("documents.user_id alter notice:", colErr.message);
+        }
+      }
+      try {
+        await sequelize.query("ALTER TABLE documents MODIFY COLUMN loan_application_id INT NULL;");
+      } catch (_) {}
+
+      // Backfill user_id on existing documents from loan_applications -> borrowers -> user_id
+      try {
+        await sequelize.query(`
+          UPDATE documents d
+          JOIN loan_applications la ON (d.loan_application_id = la.id OR d.loan_application_id = la.application_no)
+          JOIN borrowers b ON la.borrower_id = b.id
+          SET d.user_id = b.user_id
+          WHERE d.user_id IS NULL AND b.user_id IS NOT NULL;
+        `);
+        console.log("Existing documents backfilled with user_id.");
+      } catch (backfillErr) {
+        console.log("Document user_id backfill notice:", backfillErr.message);
+      }
+
       console.log("Database schema updated.");
     } catch (err) {
       console.log("Database schema alter notice:", err.message);

@@ -2,9 +2,13 @@ import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/db.js';
 
 const Document = sequelize.define('Document', {
+  user_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
   loan_application_id: {
     type: DataTypes.INTEGER,
-    allowNull: false
+    allowNull: true
   },
   document_type: {
     type: DataTypes.STRING,
