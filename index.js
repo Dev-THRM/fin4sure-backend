@@ -313,10 +313,12 @@ app.get("/api/diagnose-paths", async (req, res) => {
 
 const PORT = process.env.PORT || 8000;
 
-// Start HTTP server immediately so Hostinger proxy binds the port without timing out
-app.listen(PORT, () => {
-  console.log(`Server is running on PORT ${PORT}`);
-});
+// Start HTTP server when not running in serverless environment (e.g. Vercel)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Server is running on PORT ${PORT}`);
+  });
+}
 
 const startServer = async () => {
   try {
@@ -379,4 +381,24 @@ const startServer = async () => {
   }
 };
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+} else {
+  let dbInitPromise = null;
+  app.use(async (req, res, next) => {
+    if (!dbInitPromise) {
+      dbInitPromise = (async () => {
+        try {
+          await connectDB();
+          setupAssociations();
+        } catch (e) {
+          console.error("Serverless DB init error:", e.message);
+        }
+      })();
+    }
+    await dbInitPromise;
+    next();
+  });
+}
+
+export default app;
