@@ -173,14 +173,29 @@ export const getMyApplications = async (req, res) => {
       return dt || 'other';
     };
 
+    // Check if borrower already has the 3 required documents across any applications
+    const borrowerValidDocs = allDocs.filter(d => d.status !== 'rejected');
+    const borrowerDocTypes = borrowerValidDocs.map(d => getDocType(d));
+    const borrowerHasAadhaar = borrowerDocTypes.some(t => t === 'aadhar' || t === 'aadhaar' || t === 'aadharcombined' || t === 'aadhaarcombined' || t.includes('aadhar') || t.includes('aadhaar')) || 
+                               (borrowerDocTypes.some(t => t.includes('front')) && borrowerDocTypes.some(t => t.includes('back')));
+    const borrowerHasPan = borrowerDocTypes.some(t => t === 'pan' || t.includes('pan'));
+    const borrowerHasBank = borrowerDocTypes.some(t => t === 'bankstatement' || t === 'bankstatements' || t === 'bank' || t.includes('bank'));
+    const borrowerHasThreeDocs = borrowerHasAadhaar && borrowerHasPan && borrowerHasBank;
+
     const enrichedApps = await Promise.all(applications.map(async (app) => {
       const cleanNo = String(app.application_no || '').replace(/^F4S-?/i, '').trim();
-      const appDocs = allDocs.filter(d => 
+      let appDocs = allDocs.filter(d => 
         String(d.loan_application_id) === String(app.id) || 
         String(d.loan_application_id) === String(app.application_no) ||
         (cleanNo && String(d.loan_application_id) === String(cleanNo)) ||
         (cleanNo && String(d.loan_application_id) === `F4S-${cleanNo}`)
       );
+
+      // If a new loan application doesn't have documents uploaded specifically for it yet,
+      // inherit the borrower's existing 3 documents (aadhar, pan, bank statement)
+      if (appDocs.length === 0 && borrowerHasThreeDocs) {
+        appDocs = borrowerValidDocs;
+      }
 
       const validDocTypes = appDocs.filter(d => d.status !== 'rejected').map(d => getDocType(d));
       const rejectedDocs = appDocs.filter(d => d.status === 'rejected');
@@ -193,7 +208,8 @@ export const getMyApplications = async (req, res) => {
       const hasBank = validDocTypes.some(t => t === 'bankstatement' || t === 'bankstatements' || t === 'bank' || t.includes('bank'));
 
       // Aadhaar, PAN, and Bank Statement are mandatory; Salary Slip is optional
-      const hasAllRequired = hasAadhaar && hasPan && hasBank && !hasRejectedDocs;
+      const hasThreeDocs = hasAadhaar && hasPan && hasBank && !hasRejectedDocs;
+      const hasAllRequired = hasThreeDocs;
 
       let effectiveStatusId = Number(app.status_id || 1);
 
@@ -245,6 +261,8 @@ export const getMyApplications = async (req, res) => {
         has_aadhaar: hasAadhaar,
         has_salary: hasSalary,
         has_bank: hasBank,
+        has_three_docs: hasThreeDocs,
+        can_reupload: hasThreeDocs,
         has_sale_agreement: hasSaleAgreement,
         has_property_deed: hasPropertyDeed,
         Status: { name: stName },
@@ -525,12 +543,27 @@ export const getApplicationDocuments = async (req, res) => {
 
     const idList = Array.from(possibleIds);
 
-    const documents = await Document.findAll({
-      where: {
-        loan_application_id: { [Op.in]: idList }
-      },
-      raw: true
-    });
+    if (documents.length === 0 && app && app.borrower_id) {
+      const borrowerApps = await Loan_Application.findAll({
+        attributes: ['id', 'application_no'],
+        where: { borrower_id: app.borrower_id },
+        raw: true
+      });
+      const otherIds = borrowerApps.map(a => Number(a.id)).concat(borrowerApps.map(a => String(a.application_no).replace(/^F4S-?/i, ''))).filter(Boolean);
+      if (otherIds.length > 0) {
+        const inheritedDocs = await Document.findAll({
+          where: {
+            loan_application_id: { [Op.in]: otherIds },
+            status: { [Op.ne]: 'rejected' }
+          },
+          raw: true
+        });
+        if (inheritedDocs.length > 0) {
+          return res.json(inheritedDocs);
+        }
+      }
+    }
+
     res.json(documents);
   } catch (err) {
     console.error("Client get documents error:", err);
