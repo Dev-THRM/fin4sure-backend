@@ -42,6 +42,29 @@ import { startScraperScheduler } from './scrapers/scheduler.js';
 
 const app = express();
 
+app.set("trust proxy", 1);
+
+// Security Headers & Canonical HTTPS / non-www redirection
+app.use((req, res, next) => {
+  const host = req.headers.host || "";
+  const isWww = host.startsWith("www.");
+  const proto = req.headers["x-forwarded-proto"] || req.protocol;
+
+  // Modern HTTP Security Headers
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+
+  // Canonical redirect www -> non-www, http -> https
+  if (isWww || (proto === "http" && !host.includes("localhost") && !host.includes("127.0.0.1"))) {
+    const cleanHost = host.replace(/^www\./, "");
+    return res.redirect(301, `https://${cleanHost}${req.originalUrl}`);
+  }
+  next();
+});
+
 app.use(
   cors({
     origin: function (origin, callback) {
