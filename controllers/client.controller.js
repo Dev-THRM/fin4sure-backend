@@ -186,11 +186,11 @@ export const getMyApplications = async (req, res) => {
       const rejectedDocs = appDocs.filter(d => d.status === 'rejected');
       const hasRejectedDocs = rejectedDocs.length > 0;
 
-      const hasAadhaar = validDocTypes.some(t => t === 'aadhar' || t === 'aadhaar' || t === 'aadharcombined' || t === 'aadhaarcombined') || 
-                         (validDocTypes.some(t => t === 'aadharfront' || t === 'aadhaarfront') && validDocTypes.some(t => t === 'aadharback' || t === 'aadhaarback'));
-      const hasPan = validDocTypes.some(t => t === 'pan');
-      const hasSalary = validDocTypes.some(t => t === 'salaryslip' || t === 'salaryslips' || t === 'salary');
-      const hasBank = validDocTypes.some(t => t === 'bankstatement' || t === 'bankstatements' || t === 'bank');
+      const hasAadhaar = validDocTypes.some(t => t === 'aadhar' || t === 'aadhaar' || t === 'aadharcombined' || t === 'aadhaarcombined' || t.includes('aadhar') || t.includes('aadhaar')) || 
+                         (validDocTypes.some(t => t.includes('front')) && validDocTypes.some(t => t.includes('back')));
+      const hasPan = validDocTypes.some(t => t === 'pan' || t.includes('pan'));
+      const hasSalary = validDocTypes.some(t => t === 'salaryslip' || t === 'salaryslips' || t === 'salary' || t.includes('salary'));
+      const hasBank = validDocTypes.some(t => t === 'bankstatement' || t === 'bankstatements' || t === 'bank' || t.includes('bank'));
 
       // Aadhaar, PAN, and Bank Statement are mandatory; Salary Slip is optional
       const hasAllRequired = hasAadhaar && hasPan && hasBank && !hasRejectedDocs;
