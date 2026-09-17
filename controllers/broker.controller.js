@@ -207,12 +207,17 @@ export const referClient = async (req, res) => {
     const loanType = await Loan_type.findByPk(parseInt(loan_type_id));
     const purposeText = loan_purpose?.trim() || loanType?.name || 'General';
 
+    const cleanEmail = (email && typeof email === 'string' && email.trim().length > 0) ? email.trim() : null;
+    const cleanPhone = (number && typeof number === 'string' && number.trim().length > 0) ? number.trim() : (number ? String(number).trim() : null);
+
     // Check if user already exists
-    let clientUser = await User.findOne({ 
-      where: { 
-        [Op.or]: [{ email: email }, { mob_no: number }] 
-      } 
-    });
+    const userOrCond = [];
+    if (cleanPhone) userOrCond.push({ mob_no: cleanPhone });
+    if (cleanEmail) userOrCond.push({ email: cleanEmail });
+
+    let clientUser = userOrCond.length > 0
+      ? await User.findOne({ where: { [Op.or]: userOrCond } })
+      : null;
 
     let borrowerId = null;
 
@@ -226,19 +231,16 @@ export const referClient = async (req, res) => {
       const hashedPassword = await bcrypt.hash("Pass@1234", salt);
 
       clientUser = await User.create({
-        name: name,
-        email: email,
-        mob_no: number,
+        name: (name && name.trim()) ? name.trim() : 'Borrower',
+        email: cleanEmail,
+        mob_no: cleanPhone,
         password_hash: hashedPassword,
         role_id: 1, // Borrower role
         status: 'active'
       });
 
-      // Send WhatsApp message to user (Commented out for now as per instructions)
-      // await sendWhatsAppMessage(number, `Your Fin4Sure account has been created. Temporary password: Password@12. Please log in and change your password.`);
-
       let defaultPin = await Pincode.findOne();
-      let fallbackPincodeId = defaultPin ? defaultPin.id : 1;
+      let fallbackPincodeId = defaultPin ? defaultPin.id : null;
 
       let pincodeId = fallbackPincodeId;
       if (pincode) {
@@ -252,14 +254,14 @@ export const referClient = async (req, res) => {
         if (pin) pincodeId = pin.id;
       }
 
-      const validGender = (gender && ['male', 'female', 'other'].includes(gender.toLowerCase())) ? gender.toLowerCase() : 'other';
+      const validGender = (gender && ['male', 'female', 'other'].includes(gender.toLowerCase())) ? gender.toLowerCase() : null;
 
-      // Create new borrower profile
+      // Create new borrower profile with nullable fields
       const newBorrower = await Borrower.create({
         user_id: clientUser.id,
-        dob: dob ? new Date(dob) : new Date('1990-01-01'),
+        dob: dob ? new Date(dob) : null,
         gender: validGender,
-        address: address || 'To be updated',
+        address: address || null,
         pincode_id: pincodeId,
         profile_status: 'Active'
       });
@@ -270,24 +272,26 @@ export const referClient = async (req, res) => {
         clientUser.name = name.trim();
         await clientUser.save();
       }
-      if (number && number.trim()) {
-        clientUser.mob_no = number.trim();
+      if (cleanPhone) {
+        clientUser.mob_no = cleanPhone;
         await clientUser.save();
       }
-      const validGender = (gender && ['male', 'female', 'other'].includes(gender.toLowerCase())) ? gender.toLowerCase() : 'other';
+      if (cleanEmail && !clientUser.email) {
+        clientUser.email = cleanEmail;
+        await clientUser.save();
+      }
+
+      const validGender = (gender && ['male', 'female', 'other'].includes(gender.toLowerCase())) ? gender.toLowerCase() : null;
 
       // Find their borrower profile
-      let defaultPin = await Pincode.findOne();
-      let fallbackPincodeId = defaultPin ? defaultPin.id : 1;
-
       let existingBorrower = await Borrower.findOne({ where: { user_id: clientUser.id } });
       if (!existingBorrower) {
         existingBorrower = await Borrower.create({
           user_id: clientUser.id,
-          dob: dob ? new Date(dob) : new Date('1990-01-01'),
+          dob: dob ? new Date(dob) : null,
           gender: validGender,
-          address: address || 'To be updated',
-          pincode_id: fallbackPincodeId,
+          address: address || null,
+          pincode_id: null,
           profile_status: 'Active'
         });
       }
@@ -295,27 +299,20 @@ export const referClient = async (req, res) => {
         
       let shouldSave = false;
       
-      if (dob && (!existingBorrower.dob || existingBorrower.dob.toISOString().startsWith('1990-01-01'))) {
+      if (dob && !existingBorrower.dob) {
         existingBorrower.dob = new Date(dob);
         shouldSave = true;
       }
-      if (gender && (!existingBorrower.gender || existingBorrower.gender === 'Other')) {
+      if (validGender && !existingBorrower.gender) {
         existingBorrower.gender = validGender;
         shouldSave = true;
       }
-      
-      if (address && existingBorrower.address === 'To be updated') {
+      if (address && !existingBorrower.address) {
         existingBorrower.address = address;
         shouldSave = true;
       }
-      if (pincode && existingBorrower.pincode_id === fallbackPincodeId) {
+      if (pincode && !existingBorrower.pincode_id) {
         let pin = await Pincode.findOne({ where: { code: pincode } });
-        if (!pin && state && district && city) {
-          const [stateObj] = await State.findOrCreate({ where: { name: state }, defaults: { country: "India" } });
-          const [districtObj] = await District.findOrCreate({ where: { name: district }, defaults: { state_id: stateObj.id } });
-          const [cityObj] = await City.findOrCreate({ where: { name: city }, defaults: { district_id: districtObj.id } });
-          pin = await Pincode.create({ code: pincode, city_id: cityObj.id });
-        }
         if (pin) {
           existingBorrower.pincode_id = pin.id;
           shouldSave = true;

@@ -47,6 +47,13 @@ const connectDB = async () => {
     }
 
     try {
+      await sequelize.query("ALTER TABLE users MODIFY COLUMN email VARCHAR(255) NULL;");
+      console.log("Migration: Updated users.email to nullable");
+    } catch (err) {
+      // Safe to ignore
+    }
+
+    try {
       await sequelize.query("ALTER TABLE users ADD UNIQUE (email);");
       console.log("Migration: Added unique constraint to users.email");
     } catch (err) {
