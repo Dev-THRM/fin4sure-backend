@@ -121,6 +121,30 @@ export const getMyApplications = async (req, res) => {
       });
     }
 
+    // Fetch associated lenders for these applications
+    const lenderMap = new Map();
+    try {
+      if (Loan_Application.sequelize) {
+        const [lenderRows] = await Loan_Application.sequelize.query(`
+          SELECT 
+            lap.loan_application_id,
+            COALESCE(l.name, l.short) AS lender_name
+          FROM lender_applications lap
+          LEFT JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
+          LEFT JOIN lenders l ON l.id = llr.lender_id
+          ORDER BY (lap.status = 'active') DESC, lap.id ASC
+        `);
+        lenderRows.forEach(row => {
+          const k = String(row.loan_application_id);
+          if (row.lender_name && !lenderMap.has(k)) {
+            lenderMap.set(k, row.lender_name);
+          }
+        });
+      }
+    } catch (e) {
+      console.warn("Could not fetch lender names:", e.message);
+    }
+
     const norm = (s) => String(s || '').toLowerCase().replace(/[\s_-]+/g, '').trim();
     const getDocType = (d) => {
       const dt = norm(d.document_type);
@@ -169,9 +193,24 @@ export const getMyApplications = async (req, res) => {
 
       const stName = effectiveStatusId === 3 ? "Credit" : (statusMap.get(effectiveStatusId) || "applied");
       const ltObj = loanTypeMap.get(app.loan_type_id) || { name: "Home Loan", short_id: "home" };
+      const resolvedBank = lenderMap.get(String(app.id)) || 
+                           lenderMap.get(String(app.application_no)) || 
+                           (cleanNo && lenderMap.get(cleanNo)) || 
+                           "HDFC Bank";
+      const formattedAppNo = app.application_no 
+        ? (String(app.application_no).toUpperCase().startsWith('F4S-') 
+            ? String(app.application_no).toUpperCase() 
+            : `F4S-${app.application_no}`)
+        : `F4S-${String(app.id || 3901).padStart(4, '0')}`;
+
       return {
         ...app,
+        bank: resolvedBank,
+        bank_name: resolvedBank,
+        application_no: formattedAppNo,
         status_id: effectiveStatusId,
+        has_uploaded_docs: appDocs.length > 0,
+        total_docs_count: appDocs.length,
         has_all_docs: hasAllRequired,
         has_rejected_docs: hasRejectedDocs,
         rejected_count: rejectedDocs.length,
