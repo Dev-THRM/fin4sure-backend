@@ -121,7 +121,7 @@ export const getMyApplications = async (req, res) => {
       });
     }
 
-    // Fetch associated lenders for these applications
+    // Fetch associated lenders for these applications (accumulating all unique lenders per application)
     const lenderMap = new Map();
     try {
       if (Loan_Application.sequelize) {
@@ -132,18 +132,32 @@ export const getMyApplications = async (req, res) => {
           FROM lender_applications lap
           LEFT JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
           LEFT JOIN lenders l ON l.id = llr.lender_id
-          ORDER BY (lap.status = 'active') DESC, lap.id ASC
+          WHERE COALESCE(l.name, l.short) IS NOT NULL
+          ORDER BY lap.id ASC
         `);
         lenderRows.forEach(row => {
           const k = String(row.loan_application_id);
-          if (row.lender_name && !lenderMap.has(k)) {
-            lenderMap.set(k, row.lender_name);
+          const name = String(row.lender_name || '').trim();
+          if (name) {
+            if (!lenderMap.has(k)) {
+              lenderMap.set(k, []);
+            }
+            const arr = lenderMap.get(k);
+            if (!arr.includes(name)) {
+              arr.push(name);
+            }
           }
         });
       }
     } catch (e) {
       console.warn("Could not fetch lender names:", e.message);
     }
+
+    let directLenderMap = new Map();
+    try {
+      const allLenders = await Lender.findAll({ raw: true });
+      directLenderMap = new Map(allLenders.map(l => [Number(l.id), l.name || l.short]));
+    } catch (e) {}
 
     const norm = (s) => String(s || '').toLowerCase().replace(/[\s_-]+/g, '').trim();
     const getDocType = (d) => {
@@ -193,10 +207,17 @@ export const getMyApplications = async (req, res) => {
 
       const stName = effectiveStatusId === 3 ? "Credit" : (statusMap.get(effectiveStatusId) || "applied");
       const ltObj = loanTypeMap.get(app.loan_type_id) || { name: "Home Loan", short_id: "home" };
-      const resolvedBank = lenderMap.get(String(app.id)) || 
-                           lenderMap.get(String(app.application_no)) || 
-                           (cleanNo && lenderMap.get(cleanNo)) || 
-                           "HDFC Bank";
+
+      const idList = lenderMap.get(String(app.id)) || [];
+      const noList = lenderMap.get(String(app.application_no)) || [];
+      const cleanList = cleanNo ? (lenderMap.get(cleanNo) || []) : [];
+      let combinedLenders = Array.from(new Set([...idList, ...noList, ...cleanList]));
+
+      if (combinedLenders.length === 0 && app.lender_id && directLenderMap.has(Number(app.lender_id))) {
+        combinedLenders = [directLenderMap.get(Number(app.lender_id))];
+      }
+
+      const resolvedBank = combinedLenders.length > 0 ? combinedLenders.join(", ") : "HDFC Bank";
       const formattedAppNo = app.application_no 
         ? (String(app.application_no).toUpperCase().startsWith('F4S-') 
             ? String(app.application_no).toUpperCase() 
@@ -207,6 +228,8 @@ export const getMyApplications = async (req, res) => {
         ...app,
         bank: resolvedBank,
         bank_name: resolvedBank,
+        banks: combinedLenders,
+        lender_names: combinedLenders,
         application_no: formattedAppNo,
         status_id: effectiveStatusId,
         has_uploaded_docs: appDocs.length > 0,
