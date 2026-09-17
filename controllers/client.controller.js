@@ -224,6 +224,9 @@ export const getMyApplications = async (req, res) => {
             : `F4S-${app.application_no}`)
         : `F4S-${String(app.id || 3901).padStart(4, '0')}`;
 
+      const hasSaleAgreement = validDocTypes.some(t => t.includes('sale') || t.includes('agreement'));
+      const hasPropertyDeed = validDocTypes.some(t => t.includes('property') || t.includes('title') || t.includes('deed'));
+
       return {
         ...app,
         bank: resolvedBank,
@@ -238,6 +241,12 @@ export const getMyApplications = async (req, res) => {
         has_rejected_docs: hasRejectedDocs,
         rejected_count: rejectedDocs.length,
         rejected_types: rejectedDocs.map(d => d.document_type),
+        has_pan: hasPan,
+        has_aadhaar: hasAadhaar,
+        has_salary: hasSalary,
+        has_bank: hasBank,
+        has_sale_agreement: hasSaleAgreement,
+        has_property_deed: hasPropertyDeed,
         Status: { name: stName },
         Loan_type: ltObj
       };
