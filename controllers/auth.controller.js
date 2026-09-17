@@ -68,6 +68,7 @@ export const signUpHandler = async (req, res) => {
       })
       .json({
         success: true,
+        accessToken,
         user: {
           _id: newUser.id,
           name: newUser.name,
@@ -77,10 +78,10 @@ export const signUpHandler = async (req, res) => {
       });
   } catch (err) {
     console.error("Signup error:", err);
-    if (err.message === "User already exists") {
+    if (err.message && (err.message.includes("already registered") || err.message.includes("already exists"))) {
       return res.status(409).json({ message: err.message });
     }
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(400).json({ message: err.message || "Internal server error" });
   }
 };
 

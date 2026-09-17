@@ -28,18 +28,88 @@ export const signUpService = async (data) => {
 
   const normalizedEmail = email.toLowerCase().trim();
   const cleanMobile = (number || "").trim();
+  const hashedPassword = await bcrypt.hash(password, 10);
 
   const userByEmail = await User.findOne({ where: { email: normalizedEmail } });
   if (userByEmail) {
+    // If it was an incomplete partner registration without a Partner entry from a failed attempt, recover it
+    if (role_id === 2) {
+      const existingPartner = await Partner.findOne({ where: { user_id: userByEmail.id } });
+      if (!existingPartner) {
+        userByEmail.password_hash = hashedPassword;
+        userByEmail.name = name;
+        if (cleanMobile) userByEmail.mob_no = cleanMobile;
+        await userByEmail.save();
+
+        const cityName = (city || "Mumbai").trim();
+        const districtName = (district || cityName || "Mumbai City").trim();
+        const stateName = (state || "Maharashtra").trim();
+
+        const [stateObj] = await State.findOrCreate({
+          where: { name: stateName },
+          defaults: { country: "India" },
+        });
+
+        const [districtObj] = await District.findOrCreate({
+          where: { name: districtName },
+          defaults: { state_id: stateObj.id },
+        });
+
+        const [cityObj] = await City.findOrCreate({
+          where: { name: cityName },
+          defaults: { district_id: districtObj.id },
+        });
+
+        await Partner.create({
+          user_id: userByEmail.id,
+          city_id: cityObj ? cityObj.id : null,
+        });
+
+        return userByEmail;
+      }
+    }
     throw new Error("This email is already registered. Please sign in instead.");
   }
 
   const userByMobile = cleanMobile ? await User.findOne({ where: { mob_no: cleanMobile } }) : null;
   if (userByMobile) {
+    if (role_id === 2) {
+      const existingPartner = await Partner.findOne({ where: { user_id: userByMobile.id } });
+      if (!existingPartner) {
+        userByMobile.password_hash = hashedPassword;
+        userByMobile.name = name;
+        userByMobile.email = normalizedEmail;
+        await userByMobile.save();
+
+        const cityName = (city || "Mumbai").trim();
+        const districtName = (district || cityName || "Mumbai City").trim();
+        const stateName = (state || "Maharashtra").trim();
+
+        const [stateObj] = await State.findOrCreate({
+          where: { name: stateName },
+          defaults: { country: "India" },
+        });
+
+        const [districtObj] = await District.findOrCreate({
+          where: { name: districtName },
+          defaults: { state_id: stateObj.id },
+        });
+
+        const [cityObj] = await City.findOrCreate({
+          where: { name: cityName },
+          defaults: { district_id: districtObj.id },
+        });
+
+        await Partner.create({
+          user_id: userByMobile.id,
+          city_id: cityObj ? cityObj.id : null,
+        });
+
+        return userByMobile;
+      }
+    }
     throw new Error("This mobile number is already registered. Please sign in instead.");
   }
-
-  const hashedPassword = await bcrypt.hash(password, 10);
 
   const newUser = await User.create({
     name,
@@ -53,7 +123,7 @@ export const signUpService = async (data) => {
   if (role_id === 2) {
     // Partner / Broker role
     const cityName = (city || "Mumbai").trim();
-    const districtName = (district || "Mumbai City").trim();
+    const districtName = (district || cityName || "Mumbai City").trim();
     const stateName = (state || "Maharashtra").trim();
 
     // 1. Find or create State
@@ -74,25 +144,10 @@ export const signUpService = async (data) => {
       defaults: { district_id: districtObj.id },
     });
 
-    // 4. Find or create Pincode
-    let pincodeRecord = null;
-    if (pincode) {
-      pincodeRecord = await Pincode.findOne({
-        where: { code: pincode, city_id: cityObj.id },
-      });
-      if (!pincodeRecord) {
-        pincodeRecord = await Pincode.create({
-          code: pincode,
-          city_id: cityObj.id,
-        });
-      }
-    }
-
+    // 4. Partner table schema: id, user_id, city_id, createdAt, updatedAt
     await Partner.create({
       user_id: newUser.id,
-      pincode_id: pincodeRecord ? pincodeRecord.id : null,
-      address,
-      status: "Inactive", // Requires Admin Approval
+      city_id: cityObj ? cityObj.id : null,
     });
   } else if (role_id === 1) {
     // Borrower role (User already created)
