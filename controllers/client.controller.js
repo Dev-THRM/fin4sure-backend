@@ -51,25 +51,58 @@ export const applyProduct = async (req, res) => {
 export const getMyApplications = async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
+    const { Op } = await import("sequelize");
 
     // 1. Find all borrowers associated with this user_id
     let borrowers = await Borrower.findAll({ where: { user_id: userId }, raw: true });
     let borrowerIds = borrowers.map(b => b.id);
 
+    // Also look up any borrowers linked to this user's phone or email
+    const userObj = await User.findByPk(userId, { raw: true });
+    if (userObj) {
+      try {
+        const matchingConditions = [];
+        if (userObj.mob_no) matchingConditions.push({ mob_no: userObj.mob_no });
+        if (userObj.email) matchingConditions.push({ email: userObj.email });
+
+        if (matchingConditions.length > 0) {
+          const matchedUsers = await User.findAll({
+            where: { [Op.or]: matchingConditions },
+            attributes: ['id'],
+            raw: true
+          });
+          const matchedUserIds = matchedUsers.map(u => u.id);
+          if (matchedUserIds.length > 0) {
+            const matchedBorrowers = await Borrower.findAll({
+              where: { user_id: { [Op.in]: matchedUserIds } },
+              attributes: ['id'],
+              raw: true
+            });
+            matchedBorrowers.forEach(b => {
+              if (!borrowerIds.includes(b.id)) borrowerIds.push(b.id);
+            });
+          }
+        }
+      } catch (matchErr) {
+        console.warn("Could not match borrower by phone/email:", matchErr.message);
+      }
+    }
+
     // 2. If no borrower profile found, auto-create a Borrower record right now so user always has one!
-    if (borrowerIds.length === 0) {
-      const userObj = await User.findByPk(userId, { raw: true });
-      if (userObj) {
-        const defaultPincode = await Pincode.findOne({ raw: true });
+    if (borrowerIds.length === 0 && userObj) {
+      try {
         const newB = await Borrower.create({
           user_id: userId,
           dob: new Date("1995-01-01"),
           gender: "male",
           address: userObj.address || "Main Street",
-          pincode_id: defaultPincode ? defaultPincode.id : 1,
           profile_status: "Active"
         });
-        borrowerIds = [newB.id];
+        if (newB && newB.id) {
+          borrowerIds = [newB.id];
+        }
+      } catch (createErr) {
+        console.warn("Could not auto-create borrower:", createErr.message);
       }
     }
 
@@ -107,21 +140,36 @@ export const getMyApplications = async (req, res) => {
     const appNos = applications.map(a => String(a.application_no || '')).filter(Boolean);
     const cleanNos = applications.map(a => String(a.application_no || '').replace(/^F4S-?/i, '').trim()).filter(Boolean);
     
-    const { Op } = await import("sequelize");
     const idSet = new Set([...appIds, ...appNos, ...cleanNos]);
     const allLookupIds = Array.from(idSet).filter(Boolean);
 
     let allDocs = [];
-    if (allLookupIds.length > 0 || userId) {
-      allDocs = await Document.findAll({
-        where: {
-          [Op.or]: [
-            ...(userId ? [{ user_id: userId }] : []),
-            ...(allLookupIds.length > 0 ? [{ loan_application_id: { [Op.in]: allLookupIds } }] : [])
-          ]
-        },
-        raw: true
-      });
+    try {
+      if (allLookupIds.length > 0 || userId) {
+        try {
+          allDocs = await Document.findAll({
+            where: {
+              [Op.or]: [
+                ...(userId ? [{ user_id: userId }] : []),
+                ...(allLookupIds.length > 0 ? [{ loan_application_id: { [Op.in]: allLookupIds } }] : [])
+              ]
+            },
+            raw: true
+          });
+        } catch (colErr) {
+          // If user_id column not present yet on DB, fallback to loan_application_id
+          if (allLookupIds.length > 0) {
+            allDocs = await Document.findAll({
+              where: {
+                loan_application_id: { [Op.in]: allLookupIds }
+              },
+              raw: true
+            });
+          }
+        }
+      }
+    } catch (docErr) {
+      console.warn("Could not fetch documents in getMyApplications:", docErr.message);
     }
 
     // Fetch associated lenders for these applications (accumulating all unique lenders per application)
