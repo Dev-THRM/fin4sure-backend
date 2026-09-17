@@ -32,41 +32,45 @@ export const signUpService = async (data) => {
 
   const userByEmail = await User.findOne({ where: { email: normalizedEmail } });
   if (userByEmail) {
-    // If it was an incomplete partner registration without a Partner entry from a failed attempt, recover it
     if (role_id === 2) {
+      userByEmail.role_id = 2;
+      userByEmail.password_hash = hashedPassword;
+      userByEmail.name = name;
+      userByEmail.status = 'active';
+      if (cleanMobile) userByEmail.mob_no = cleanMobile;
+      await userByEmail.save();
+
+      const cityName = (city || "Mumbai").trim();
+      const districtName = (district || cityName || "Mumbai City").trim();
+      const stateName = (state || "Maharashtra").trim();
+
+      const [stateObj] = await State.findOrCreate({
+        where: { name: stateName },
+        defaults: { country: "India" },
+      });
+
+      const [districtObj] = await District.findOrCreate({
+        where: { name: districtName },
+        defaults: { state_id: stateObj.id },
+      });
+
+      const [cityObj] = await City.findOrCreate({
+        where: { name: cityName },
+        defaults: { district_id: districtObj.id },
+      });
+
       const existingPartner = await Partner.findOne({ where: { user_id: userByEmail.id } });
       if (!existingPartner) {
-        userByEmail.password_hash = hashedPassword;
-        userByEmail.name = name;
-        if (cleanMobile) userByEmail.mob_no = cleanMobile;
-        await userByEmail.save();
-
-        const cityName = (city || "Mumbai").trim();
-        const districtName = (district || cityName || "Mumbai City").trim();
-        const stateName = (state || "Maharashtra").trim();
-
-        const [stateObj] = await State.findOrCreate({
-          where: { name: stateName },
-          defaults: { country: "India" },
-        });
-
-        const [districtObj] = await District.findOrCreate({
-          where: { name: districtName },
-          defaults: { state_id: stateObj.id },
-        });
-
-        const [cityObj] = await City.findOrCreate({
-          where: { name: cityName },
-          defaults: { district_id: districtObj.id },
-        });
-
         await Partner.create({
           user_id: userByEmail.id,
           city_id: cityObj ? cityObj.id : null,
         });
-
-        return userByEmail;
+      } else if (cityObj && existingPartner.city_id !== cityObj.id) {
+        existingPartner.city_id = cityObj.id;
+        await existingPartner.save();
       }
+
+      return userByEmail;
     }
     throw new Error("This email is already registered. Please sign in instead.");
   }
@@ -74,39 +78,44 @@ export const signUpService = async (data) => {
   const userByMobile = cleanMobile ? await User.findOne({ where: { mob_no: cleanMobile } }) : null;
   if (userByMobile) {
     if (role_id === 2) {
+      userByMobile.role_id = 2;
+      userByMobile.password_hash = hashedPassword;
+      userByMobile.name = name;
+      userByMobile.email = normalizedEmail;
+      userByMobile.status = 'active';
+      await userByMobile.save();
+
+      const cityName = (city || "Mumbai").trim();
+      const districtName = (district || cityName || "Mumbai City").trim();
+      const stateName = (state || "Maharashtra").trim();
+
+      const [stateObj] = await State.findOrCreate({
+        where: { name: stateName },
+        defaults: { country: "India" },
+      });
+
+      const [districtObj] = await District.findOrCreate({
+        where: { name: districtName },
+        defaults: { state_id: stateObj.id },
+      });
+
+      const [cityObj] = await City.findOrCreate({
+        where: { name: cityName },
+        defaults: { district_id: districtObj.id },
+      });
+
       const existingPartner = await Partner.findOne({ where: { user_id: userByMobile.id } });
       if (!existingPartner) {
-        userByMobile.password_hash = hashedPassword;
-        userByMobile.name = name;
-        userByMobile.email = normalizedEmail;
-        await userByMobile.save();
-
-        const cityName = (city || "Mumbai").trim();
-        const districtName = (district || cityName || "Mumbai City").trim();
-        const stateName = (state || "Maharashtra").trim();
-
-        const [stateObj] = await State.findOrCreate({
-          where: { name: stateName },
-          defaults: { country: "India" },
-        });
-
-        const [districtObj] = await District.findOrCreate({
-          where: { name: districtName },
-          defaults: { state_id: stateObj.id },
-        });
-
-        const [cityObj] = await City.findOrCreate({
-          where: { name: cityName },
-          defaults: { district_id: districtObj.id },
-        });
-
         await Partner.create({
           user_id: userByMobile.id,
           city_id: cityObj ? cityObj.id : null,
         });
-
-        return userByMobile;
+      } else if (cityObj && existingPartner.city_id !== cityObj.id) {
+        existingPartner.city_id = cityObj.id;
+        await existingPartner.save();
       }
+
+      return userByMobile;
     }
     throw new Error("This mobile number is already registered. Please sign in instead.");
   }
@@ -506,9 +515,19 @@ export const otpLoginService = async (email, otp, expectedRole) => {
   }
 
   if (expectedRole) {
-    const roleId = expectedRole === 'partner' ? 2 : (expectedRole === 'admin' ? 3 : 1);
+    const roleId = (expectedRole === 'partner' || expectedRole === 'broker') ? 2 : (expectedRole === 'admin' ? 3 : 1);
     if (user.role_id !== roleId) {
-      throw new Error(`This user is not a ${expectedRole}, do you want to register?`);
+      if (roleId === 2) {
+        const partner = await Partner.findOne({ where: { user_id: user.id } });
+        if (partner) {
+          user.role_id = 2;
+          await user.save();
+        } else {
+          throw new Error(`This user is not a ${expectedRole}, do you want to register?`);
+        }
+      } else {
+        throw new Error(`This user is not a ${expectedRole}, do you want to register?`);
+      }
     }
   }
 
@@ -572,9 +591,19 @@ export const loginService = async (email, password, expectedRole) => {
   }
 
   if (expectedRole) {
-    const roleId = expectedRole === 'partner' ? 2 : (expectedRole === 'admin' ? 3 : 1);
+    const roleId = (expectedRole === 'partner' || expectedRole === 'broker') ? 2 : (expectedRole === 'admin' ? 3 : 1);
     if (user.role_id !== roleId) {
-      throw new Error(`This user is not a ${expectedRole}, do you want to register?`);
+      if (roleId === 2) {
+        const partner = await Partner.findOne({ where: { user_id: user.id } });
+        if (partner) {
+          user.role_id = 2;
+          await user.save();
+        } else {
+          throw new Error(`This user is not a ${expectedRole}, do you want to register?`);
+        }
+      } else {
+        throw new Error(`This user is not a ${expectedRole}, do you want to register?`);
+      }
     }
   }
 

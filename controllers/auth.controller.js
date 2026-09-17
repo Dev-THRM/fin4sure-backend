@@ -377,8 +377,22 @@ export const profileHandler = async (req, res) => {
       user = await User.findOne({ order: [['createdAt', 'DESC']], raw: true });
     }
 
+    let partner = null;
+    if (user && !isAdmin) {
+      try {
+        partner = await Partner.findOne({ where: { user_id: user.id }, raw: true });
+      } catch (pErr) {
+        console.error("Partner check error in profileHandler:", pErr.message);
+      }
+    }
+
     let role = "borrower";
-    if (user && user.role_id === 2) role = "partner";
+    if (user && (user.role_id === 2 || partner)) {
+      role = "partner";
+      if (user.role_id !== 2) {
+        User.update({ role_id: 2 }, { where: { id: user.id } }).catch(() => {});
+      }
+    }
     if (user && user.role_id === 3) role = "admin";
 
     let clientDetails = {};
@@ -445,7 +459,9 @@ export const profileHandler = async (req, res) => {
     let partnerDetails = {};
     if (role === "partner" && user) {
       try {
-        let partner = await Partner.findOne({ where: { user_id: user.id }, raw: true });
+        if (!partner) {
+          partner = await Partner.findOne({ where: { user_id: user.id }, raw: true });
+        }
         let cityName = "";
         if (partner && partner.city_id) {
           const cRec = await City.findByPk(partner.city_id, { raw: true });
