@@ -543,6 +543,13 @@ export const getApplicationDocuments = async (req, res) => {
 
     const idList = Array.from(possibleIds);
 
+    const documents = await Document.findAll({
+      where: {
+        loan_application_id: { [Op.in]: idList }
+      },
+      raw: true
+    });
+
     if (documents.length === 0 && app && app.borrower_id) {
       const borrowerApps = await Loan_Application.findAll({
         attributes: ['id', 'application_no'],
@@ -564,7 +571,7 @@ export const getApplicationDocuments = async (req, res) => {
       }
     }
 
-    res.json(documents);
+    return res.json(documents);
   } catch (err) {
     console.error("Client get documents error:", err);
     res.status(500).json({ message: "Failed to fetch documents", error: err.message });
