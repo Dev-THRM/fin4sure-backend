@@ -77,6 +77,20 @@ export const getBrokerLeads = async (req, res) => {
                 attributes: ['name', 'mob_no'],
                 required: false
               }]
+            },
+            {
+              model: Lender_Application,
+              required: false,
+              include: [{
+                model: Lender_Loan_Rates,
+                as: 'rate',
+                required: false,
+                include: [{
+                  model: Lender,
+                  attributes: ['name', 'short'],
+                  required: false
+                }]
+              }]
             }
           ],
           order: [['createdAt', 'DESC']],
@@ -112,6 +126,10 @@ export const getBrokerLeads = async (req, res) => {
           const titleParts = [finalName, loanTypeName];
           if (finalPhone) titleParts.push(finalPhone);
 
+          const lenderNames = (app.Lender_Applications || [])
+            .map(la => la.rate?.Lender?.name || la.rate?.Lender?.short)
+            .filter(Boolean);
+
           return {
             id: 'app_' + app.id,
             appId: app.id,
@@ -125,6 +143,7 @@ export const getBrokerLeads = async (req, res) => {
             status: app.status_id >= 7 ? 'completed' : app.status_id >= 3 ? 'in-progress' : 'pending',
             createdAt: app.createdAt,
             amount: app.loan_amount,
+            lenderName: lenderNames.length > 0 ? lenderNames.join(', ') : null,
             client_preference: app.client_preference,
             source: 'application',
             isApp: true
