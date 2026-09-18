@@ -1874,6 +1874,74 @@ export const timelineActivity = async (req, res) => {
   }
 };
 
+export const categorizeLender = (type = '', name = '') => {
+  const t = String(type || '').toLowerCase().trim();
+  const n = String(name || '').toLowerCase().trim();
+
+  // 1. Small Finance Banks (SFB)
+  if (
+    t === 'sfb' ||
+    t.includes('sfb') ||
+    t.includes('small') ||
+    n.includes('small finance') ||
+    n.includes('sfb') ||
+    n.includes('au small') ||
+    n.includes('equitas') ||
+    n.includes('ujjivan') ||
+    n.includes('suryoday') ||
+    n.includes('utkarsh') ||
+    n.includes('jana') ||
+    n.includes('esaf') ||
+    n.includes('fincare') ||
+    n.includes('shivalik') ||
+    n.includes('capital small') ||
+    n.includes('unity small')
+  ) {
+    return 'SFB';
+  }
+
+  // 2. Public Sector Banks (PSU)
+  const isPsuName =
+    n.includes('state bank') || n.includes('sbi') ||
+    n.includes('punjab national') || (n.includes('pnb') && !n.includes('housing')) ||
+    n.includes('bank of baroda') || n.includes('bob') ||
+    n.includes('canara') ||
+    n.includes('union bank') ||
+    n.includes('bank of india') || (n.includes('boi') && !n.includes('housing')) ||
+    n.includes('indian bank') ||
+    n.includes('central bank') || n.includes('cbi') ||
+    n.includes('indian overseas') || n.includes('iob') ||
+    n.includes('uco bank') || n.includes('uco') ||
+    n.includes('bank of maharashtra') || n.includes('bom') ||
+    n.includes('punjab & sind') || n.includes('punjab and sind') || n.includes('psb') ||
+    n.includes('idbi');
+
+  if (t === 'psu' || t.includes('psu') || t.includes('public') || t.includes('govt') || isPsuName) {
+    return 'PSU';
+  }
+
+  // 3. NBFC / Housing Finance Companies (NBFC/HFC)
+  const isNbfcName =
+    n.includes('housing finance') || n.includes('hfc') || n.includes('nbfc') ||
+    n.includes('finserv') || n.includes('bajaj') || n.includes('lic housing') || n.includes('pnb housing') ||
+    n.includes('aditya birla') || n.includes('abfl') || n.includes('abhfl') ||
+    n.includes('l&t finance') || n.includes('tata capital') || n.includes('tchf') ||
+    n.includes('sundaram') || n.includes('iifl') || n.includes('navi') ||
+    n.includes('gic housing') || n.includes('repco') || n.includes('poonawalla') ||
+    n.includes('chola') || n.includes('hero fincorp') || n.includes('shriram') ||
+    n.includes('piramal') || n.includes('manappuram') || n.includes('muthoot') ||
+    n.includes('home first') || n.includes('aavas') || n.includes('aadhar') ||
+    n.includes('godrej') || n.includes('indiabulls') || n.includes('fedbank') ||
+    n.includes('mahindra finance');
+
+  if (t.includes('nbfc') || t.includes('hfc') || isNbfcName) {
+    return 'NBFC/HFC';
+  }
+
+  // 4. Private Banks
+  return 'Private';
+};
+
 /* -----------------------------------------------------
    ADMIN – LENDER INTEREST RATES HELPER (Real Database Only)
 ----------------------------------------------------- */
@@ -1910,6 +1978,23 @@ export const getLenderRatesHelper = async (loanTypeShortId = 'HL') => {
   // Fetch all lenders directly from DB
   const dbLenders = await Lender.findAll({ order: [['id', 'ASC']], raw: true });
 
+  // Self-heal any miscategorized SFBs in DB in background
+  try {
+    Lender.update(
+      { type: 'SFB' },
+      {
+        where: {
+          [Op.or]: [
+            { name: { [Op.like]: '%Small Finance%' } },
+            { short: { [Op.like]: '%SFB%' } },
+            { name: { [Op.like]: '%SFB%' } }
+          ],
+          type: { [Op.ne]: 'SFB' }
+        }
+      }
+    ).catch(() => {});
+  } catch (_) {}
+
   // Fetch real rates for this loanTypeId directly from DB
   const dbRates = await LenderLoanRates.findAll({
     where: { loan_type_id: loanTypeId },
@@ -1942,7 +2027,7 @@ export const getLenderRatesHelper = async (loanTypeShortId = 'HL') => {
       lenderId: lender.id,
       name: lender.name,
       short: lender.short || lender.name,
-      type: lender.type ? (lender.type.toUpperCase() === 'PSU' ? 'PSU' : lender.type.toLowerCase().includes('nbfc') ? 'NBFC/HFC' : lender.type.toLowerCase().includes('small') ? 'SFB' : 'Private') : "Private",
+      type: categorizeLender(lender.type, lender.name),
       emoji: '🏦',
       flowLow,
       flowHigh,
@@ -2558,13 +2643,21 @@ export const getApplicationDocuments = async (req, res) => {
       raw: true
     });
 
+    let resolvedUserId = null;
     if (app) {
       targetAppId = app.id;
+      if (app.borrower_id) {
+        const borrower = await Borrower.findByPk(app.borrower_id, { raw: true });
+        if (borrower && borrower.user_id) {
+          resolvedUserId = borrower.user_id;
+        }
+      }
     }
 
     const documents = await Document.findAll({
       where: {
         [Op.or]: [
+          ...(resolvedUserId ? [{ user_id: resolvedUserId }] : []),
           { loan_application_id: targetAppId },
           ...(app ? [{ loan_application_id: app.application_no }] : [])
         ]
@@ -2615,25 +2708,29 @@ export const updateApplicationDocumentStatus = async (req, res) => {
       } catch (_) {}
 
       // Revert application stage to Docs (status_id = 2) so it does not stay in Credit stage
-      if (doc.loan_application_id) {
-        try {
-          const { Op } = await import("sequelize");
+      try {
+        const { Op } = await import("sequelize");
+        let appWhere = [];
+        if (doc.loan_application_id) {
           const cleanAppNo = String(doc.loan_application_id).replace(/^F4S-?/i, '').trim();
-          const app = await Loan_Application.findOne({
-            where: {
-              [Op.or]: [
-                { id: isNaN(doc.loan_application_id) ? -1 : Number(doc.loan_application_id) },
-                { application_no: cleanAppNo }
-              ]
-            }
-          });
-          if (app && app.status_id > 2) {
-            app.status_id = 2; // Move back to Docs stage
-            await app.save();
-          }
-        } catch (e) {
-          console.error("Error reverting application status on doc rejection:", e);
+          appWhere.push({ id: isNaN(doc.loan_application_id) ? -1 : Number(doc.loan_application_id) });
+          appWhere.push({ application_no: cleanAppNo });
         }
+        if (doc.user_id) {
+          const borrowers = await Borrower.findAll({ where: { user_id: doc.user_id }, attributes: ['id'], raw: true });
+          const bIds = borrowers.map(b => b.id);
+          if (bIds.length > 0) {
+            appWhere.push({ borrower_id: { [Op.in]: bIds } });
+          }
+        }
+        if (appWhere.length > 0) {
+          await Loan_Application.update(
+            { status_id: 2 },
+            { where: { [Op.or]: appWhere, status_id: { [Op.gt]: 2 } } }
+          );
+        }
+      } catch (e) {
+        console.error("Error reverting application status on doc rejection:", e);
       }
     }
 

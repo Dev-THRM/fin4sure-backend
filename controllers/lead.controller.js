@@ -12,11 +12,12 @@ import Loan_Application from "../models/loan_application.js";
 import Loan_type from "../models/loan_type.js";
 import Lender_Loan_Rates from "../models/lender_loan_rates.js";
 import Lender_Application from "../models/lender_application.js";
+import Lender from "../models/lender.js";
 
 export const applyLoan = async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
-    const { pan, product, dob, address, state, district, pincode, loanAmount, tenure, selectedLenders, loan_purpose } = req.body;
+    const { pan, product, dob, address, state, district, pincode, loanAmount, tenure, selectedLenders, selectedLenderNames, lenderNames, loan_purpose } = req.body;
 
     let loanTypeId = 1; // Default fallback
     if (product) {
@@ -84,6 +85,15 @@ export const applyLoan = async (req, res) => {
 
     const borrowerIdVal = borrower ? borrower.id : 1;
 
+    const rawLenders = selectedLenders || req.body.lenderIds || [];
+    const rawLenderNames = selectedLenderNames || lenderNames || req.body.lenderNames || [];
+
+    let primaryLenderId = null;
+    if (Array.isArray(rawLenders) && rawLenders.length > 0) {
+      const first = rawLenders[0];
+      if (!isNaN(Number(first))) primaryLenderId = Number(first);
+    }
+
     const newLoanApp = await Loan_Application.create({
       application_no: applicationNo,
       borrower_id: borrowerIdVal,
@@ -93,30 +103,96 @@ export const applyLoan = async (req, res) => {
       tenure: Number(tenure) || 12,
       status_id: 2, // Applied complete -> Current stage is Docs (ID: 2)
       partner_id: null,
-      lender_id: null,
+      lender_id: primaryLenderId,
       client_preference: null
     });
 
-    if (selectedLenders && Array.isArray(selectedLenders) && selectedLenders.length > 0) {
-      for (const lenderId of selectedLenders) {
+    const attachedLenderIds = new Set();
+
+    if (Array.isArray(rawLenders) && rawLenders.length > 0) {
+      for (const item of rawLenders) {
         try {
-          let [rateObj] = await Lender_Loan_Rates.findOrCreate({
-            where: { lender_id: lenderId, loan_type_id: loanTypeId },
-            defaults: {
-              rate_type: 'floating',
-              min_rate: 8.5,
-              max_rate: 14.5
-            }
-          });
-          if (rateObj) {
-            await Lender_Application.create({
-              loan_application_id: newLoanApp.id,
-              lender_rate_id: rateObj.id,
-              status: 'pending'
+          let targetLenderId = null;
+          if (!isNaN(Number(item))) {
+            targetLenderId = Number(item);
+          } else if (typeof item === 'string') {
+            const lenderRow = await Lender.findOne({
+              where: {
+                [Op.or]: [
+                  { name: item },
+                  { short: item }
+                ]
+              },
+              raw: true
             });
+            if (lenderRow) targetLenderId = lenderRow.id;
+          }
+
+          if (targetLenderId) {
+            attachedLenderIds.add(targetLenderId);
+            let rateObj = await Lender_Loan_Rates.findOne({
+              where: { lender_id: targetLenderId, loan_type_id: loanTypeId }
+            });
+            if (!rateObj) {
+              rateObj = await Lender_Loan_Rates.create({
+                lender_id: targetLenderId,
+                loan_type_id: loanTypeId,
+                rate_type: 'floating',
+                min_rate: 8.5,
+                max_rate: 14.5
+              });
+            }
+            if (rateObj) {
+              await Lender_Application.create({
+                loan_application_id: newLoanApp.id,
+                lender_rate_id: rateObj.id,
+                status: 'pending'
+              });
+            }
           }
         } catch (lenderErr) {
           console.error("Error attaching lender application:", lenderErr.message);
+        }
+      }
+    }
+
+    if (Array.isArray(rawLenderNames) && rawLenderNames.length > 0) {
+      for (const lenderName of rawLenderNames) {
+        try {
+          if (typeof lenderName !== 'string') continue;
+          const lenderRow = await Lender.findOne({
+            where: {
+              [Op.or]: [
+                { name: lenderName },
+                { short: lenderName }
+              ]
+            },
+            raw: true
+          });
+          if (lenderRow && !attachedLenderIds.has(lenderRow.id)) {
+            attachedLenderIds.add(lenderRow.id);
+            let rateObj = await Lender_Loan_Rates.findOne({
+              where: { lender_id: lenderRow.id, loan_type_id: loanTypeId }
+            });
+            if (!rateObj) {
+              rateObj = await Lender_Loan_Rates.create({
+                lender_id: lenderRow.id,
+                loan_type_id: loanTypeId,
+                rate_type: 'floating',
+                min_rate: 8.5,
+                max_rate: 14.5
+              });
+            }
+            if (rateObj) {
+              await Lender_Application.create({
+                loan_application_id: newLoanApp.id,
+                lender_rate_id: rateObj.id,
+                status: 'pending'
+              });
+            }
+          }
+        } catch (nameErr) {
+          console.error("Error attaching lender by name:", nameErr.message);
         }
       }
     }

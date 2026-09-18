@@ -8,23 +8,23 @@ const Borrower = sequelize.define('Borrower', {
   },
   dob: {
     type: DataTypes.DATE,
-    allowNull: false
+    allowNull: true
   },
   gender: {
     type: DataTypes.ENUM('male', 'female', 'other'),
-    allowNull: false
+    allowNull: true
   },
   address: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: true
   },
   pincode_id: {
     type: DataTypes.INTEGER,
-    allowNull: false
+    allowNull: true
   },
   profile_status: {
     type: DataTypes.ENUM('Active', 'Inactive', 'Completed', 'Incomplete', 'Under Review', 'Rejected'),
-    allowNull: false,
+    allowNull: true,
     defaultValue: 'Active'
   }
 }, {

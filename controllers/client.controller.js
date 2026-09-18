@@ -51,25 +51,58 @@ export const applyProduct = async (req, res) => {
 export const getMyApplications = async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
+    const { Op } = await import("sequelize");
 
     // 1. Find all borrowers associated with this user_id
     let borrowers = await Borrower.findAll({ where: { user_id: userId }, raw: true });
     let borrowerIds = borrowers.map(b => b.id);
 
+    // Also look up any borrowers linked to this user's phone or email
+    const userObj = await User.findByPk(userId, { raw: true });
+    if (userObj) {
+      try {
+        const matchingConditions = [];
+        if (userObj.mob_no) matchingConditions.push({ mob_no: userObj.mob_no });
+        if (userObj.email) matchingConditions.push({ email: userObj.email });
+
+        if (matchingConditions.length > 0) {
+          const matchedUsers = await User.findAll({
+            where: { [Op.or]: matchingConditions },
+            attributes: ['id'],
+            raw: true
+          });
+          const matchedUserIds = matchedUsers.map(u => u.id);
+          if (matchedUserIds.length > 0) {
+            const matchedBorrowers = await Borrower.findAll({
+              where: { user_id: { [Op.in]: matchedUserIds } },
+              attributes: ['id'],
+              raw: true
+            });
+            matchedBorrowers.forEach(b => {
+              if (!borrowerIds.includes(b.id)) borrowerIds.push(b.id);
+            });
+          }
+        }
+      } catch (matchErr) {
+        console.warn("Could not match borrower by phone/email:", matchErr.message);
+      }
+    }
+
     // 2. If no borrower profile found, auto-create a Borrower record right now so user always has one!
-    if (borrowerIds.length === 0) {
-      const userObj = await User.findByPk(userId, { raw: true });
-      if (userObj) {
-        const defaultPincode = await Pincode.findOne({ raw: true });
+    if (borrowerIds.length === 0 && userObj) {
+      try {
         const newB = await Borrower.create({
           user_id: userId,
           dob: new Date("1995-01-01"),
           gender: "male",
           address: userObj.address || "Main Street",
-          pincode_id: defaultPincode ? defaultPincode.id : 1,
           profile_status: "Active"
         });
-        borrowerIds = [newB.id];
+        if (newB && newB.id) {
+          borrowerIds = [newB.id];
+        }
+      } catch (createErr) {
+        console.warn("Could not auto-create borrower:", createErr.message);
       }
     }
 
@@ -107,19 +140,75 @@ export const getMyApplications = async (req, res) => {
     const appNos = applications.map(a => String(a.application_no || '')).filter(Boolean);
     const cleanNos = applications.map(a => String(a.application_no || '').replace(/^F4S-?/i, '').trim()).filter(Boolean);
     
-    const { Op } = await import("sequelize");
     const idSet = new Set([...appIds, ...appNos, ...cleanNos]);
     const allLookupIds = Array.from(idSet).filter(Boolean);
 
     let allDocs = [];
-    if (allLookupIds.length > 0) {
-      allDocs = await Document.findAll({
-        where: {
-          loan_application_id: { [Op.in]: allLookupIds }
-        },
-        raw: true
-      });
+    try {
+      if (allLookupIds.length > 0 || userId) {
+        try {
+          allDocs = await Document.findAll({
+            where: {
+              [Op.or]: [
+                ...(userId ? [{ user_id: userId }] : []),
+                ...(allLookupIds.length > 0 ? [{ loan_application_id: { [Op.in]: allLookupIds } }] : [])
+              ]
+            },
+            raw: true
+          });
+        } catch (colErr) {
+          // If user_id column not present yet on DB, fallback to loan_application_id
+          if (allLookupIds.length > 0) {
+            allDocs = await Document.findAll({
+              where: {
+                loan_application_id: { [Op.in]: allLookupIds }
+              },
+              raw: true
+            });
+          }
+        }
+      }
+    } catch (docErr) {
+      console.warn("Could not fetch documents in getMyApplications:", docErr.message);
     }
+
+    // Fetch associated lenders for these applications (accumulating all unique lenders per application)
+    const lenderMap = new Map();
+    try {
+      if (Loan_Application.sequelize) {
+        const [lenderRows] = await Loan_Application.sequelize.query(`
+          SELECT 
+            lap.loan_application_id,
+            COALESCE(l.name, l.short) AS lender_name
+          FROM lender_applications lap
+          LEFT JOIN lender_loan_rates llr ON llr.id = lap.lender_rate_id
+          LEFT JOIN lenders l ON l.id = llr.lender_id
+          WHERE COALESCE(l.name, l.short) IS NOT NULL
+          ORDER BY lap.id ASC
+        `);
+        lenderRows.forEach(row => {
+          const k = String(row.loan_application_id);
+          const name = String(row.lender_name || '').trim();
+          if (name) {
+            if (!lenderMap.has(k)) {
+              lenderMap.set(k, []);
+            }
+            const arr = lenderMap.get(k);
+            if (!arr.includes(name)) {
+              arr.push(name);
+            }
+          }
+        });
+      }
+    } catch (e) {
+      console.warn("Could not fetch lender names:", e.message);
+    }
+
+    let directLenderMap = new Map();
+    try {
+      const allLenders = await Lender.findAll({ raw: true });
+      directLenderMap = new Map(allLenders.map(l => [Number(l.id), l.name || l.short]));
+    } catch (e) {}
 
     const norm = (s) => String(s || '').toLowerCase().replace(/[\s_-]+/g, '').trim();
     const getDocType = (d) => {
@@ -135,27 +224,44 @@ export const getMyApplications = async (req, res) => {
       return dt || 'other';
     };
 
+    // Check if borrower already has the 3 required documents across any applications / user profile
+    const borrowerValidDocs = allDocs.filter(d => d.status !== 'rejected');
+    const borrowerDocTypes = borrowerValidDocs.map(d => getDocType(d));
+    const borrowerHasAadhaar = borrowerDocTypes.some(t => t === 'aadhar' || t === 'aadhaar' || t === 'aadharcombined' || t === 'aadhaarcombined' || t.includes('aadhar') || t.includes('aadhaar')) || 
+                               (borrowerDocTypes.some(t => t.includes('front')) && borrowerDocTypes.some(t => t.includes('back')));
+    const borrowerHasPan = borrowerDocTypes.some(t => t === 'pan' || t.includes('pan'));
+    const borrowerHasBank = borrowerDocTypes.some(t => t === 'bankstatement' || t === 'bankstatements' || t === 'bank' || t.includes('bank'));
+    const borrowerHasThreeDocs = borrowerHasAadhaar && borrowerHasPan && borrowerHasBank;
+
     const enrichedApps = await Promise.all(applications.map(async (app) => {
       const cleanNo = String(app.application_no || '').replace(/^F4S-?/i, '').trim();
-      const appDocs = allDocs.filter(d => 
+      let appDocs = allDocs.filter(d => 
+        (userId && d.user_id && Number(d.user_id) === Number(userId)) ||
         String(d.loan_application_id) === String(app.id) || 
         String(d.loan_application_id) === String(app.application_no) ||
         (cleanNo && String(d.loan_application_id) === String(cleanNo)) ||
         (cleanNo && String(d.loan_application_id) === `F4S-${cleanNo}`)
       );
 
+      // If a new loan application doesn't have documents uploaded specifically for it yet,
+      // inherit the user/borrower's existing 3 documents (aadhar, pan, bank statement)
+      if (appDocs.length === 0 && borrowerHasThreeDocs) {
+        appDocs = borrowerValidDocs;
+      }
+
       const validDocTypes = appDocs.filter(d => d.status !== 'rejected').map(d => getDocType(d));
       const rejectedDocs = appDocs.filter(d => d.status === 'rejected');
       const hasRejectedDocs = rejectedDocs.length > 0;
 
-      const hasAadhaar = validDocTypes.some(t => t === 'aadhar' || t === 'aadhaar' || t === 'aadharcombined' || t === 'aadhaarcombined') || 
-                         (validDocTypes.some(t => t === 'aadharfront' || t === 'aadhaarfront') && validDocTypes.some(t => t === 'aadharback' || t === 'aadhaarback'));
-      const hasPan = validDocTypes.some(t => t === 'pan');
-      const hasSalary = validDocTypes.some(t => t === 'salaryslip' || t === 'salaryslips' || t === 'salary');
-      const hasBank = validDocTypes.some(t => t === 'bankstatement' || t === 'bankstatements' || t === 'bank');
+      const hasAadhaar = validDocTypes.some(t => t === 'aadhar' || t === 'aadhaar' || t === 'aadharcombined' || t === 'aadhaarcombined' || t.includes('aadhar') || t.includes('aadhaar')) || 
+                         (validDocTypes.some(t => t.includes('front')) && validDocTypes.some(t => t.includes('back')));
+      const hasPan = validDocTypes.some(t => t === 'pan' || t.includes('pan'));
+      const hasSalary = validDocTypes.some(t => t === 'salaryslip' || t === 'salaryslips' || t === 'salary' || t.includes('salary'));
+      const hasBank = validDocTypes.some(t => t === 'bankstatement' || t === 'bankstatements' || t === 'bank' || t.includes('bank'));
 
       // Aadhaar, PAN, and Bank Statement are mandatory; Salary Slip is optional
-      const hasAllRequired = hasAadhaar && hasPan && hasBank && !hasRejectedDocs;
+      const hasThreeDocs = hasAadhaar && hasPan && hasBank && !hasRejectedDocs;
+      const hasAllRequired = hasThreeDocs;
 
       let effectiveStatusId = Number(app.status_id || 1);
 
@@ -169,13 +275,48 @@ export const getMyApplications = async (req, res) => {
 
       const stName = effectiveStatusId === 3 ? "Credit" : (statusMap.get(effectiveStatusId) || "applied");
       const ltObj = loanTypeMap.get(app.loan_type_id) || { name: "Home Loan", short_id: "home" };
+
+      const idList = lenderMap.get(String(app.id)) || [];
+      const noList = lenderMap.get(String(app.application_no)) || [];
+      const cleanList = cleanNo ? (lenderMap.get(cleanNo) || []) : [];
+      let combinedLenders = Array.from(new Set([...idList, ...noList, ...cleanList]));
+
+      if (combinedLenders.length === 0 && app.lender_id && directLenderMap.has(Number(app.lender_id))) {
+        combinedLenders = [directLenderMap.get(Number(app.lender_id))];
+      }
+
+      const resolvedBank = combinedLenders.length > 0 ? combinedLenders.join(", ") : "HDFC Bank";
+      const formattedAppNo = app.application_no 
+        ? (String(app.application_no).toUpperCase().startsWith('F4S-') 
+            ? String(app.application_no).toUpperCase() 
+            : `F4S-${app.application_no}`)
+        : `F4S-${String(app.id || 3901).padStart(4, '0')}`;
+
+      const hasSaleAgreement = validDocTypes.some(t => t.includes('sale') || t.includes('agreement'));
+      const hasPropertyDeed = validDocTypes.some(t => t.includes('property') || t.includes('title') || t.includes('deed'));
+
       return {
         ...app,
+        bank: resolvedBank,
+        bank_name: resolvedBank,
+        banks: combinedLenders,
+        lender_names: combinedLenders,
+        application_no: formattedAppNo,
         status_id: effectiveStatusId,
+        has_uploaded_docs: appDocs.length > 0,
+        total_docs_count: appDocs.length,
         has_all_docs: hasAllRequired,
         has_rejected_docs: hasRejectedDocs,
         rejected_count: rejectedDocs.length,
         rejected_types: rejectedDocs.map(d => d.document_type),
+        has_pan: hasPan,
+        has_aadhaar: hasAadhaar,
+        has_salary: hasSalary,
+        has_bank: hasBank,
+        has_three_docs: hasThreeDocs,
+        can_reupload: hasThreeDocs,
+        has_sale_agreement: hasSaleAgreement,
+        has_property_deed: hasPropertyDeed,
         Status: { name: stName },
         Loan_type: ltObj
       };
@@ -214,6 +355,15 @@ export const uploadDocs = async (req, res) => {
 
     if (!app) {
       return res.status(404).json({ message: "Loan application not found" });
+    }
+
+    // Resolve user_id from token or via borrower association
+    let resolvedUserId = req.user?.id || req.user?._id || null;
+    if (!resolvedUserId && app && app.borrower_id) {
+      const borrower = await Borrower.findByPk(app.borrower_id, { raw: true });
+      if (borrower && borrower.user_id) {
+        resolvedUserId = borrower.user_id;
+      }
     }
 
     const files = req.files || [];
@@ -284,11 +434,20 @@ export const uploadDocs = async (req, res) => {
 
     const idList = Array.from(possibleIds);
 
-    // Unify any older document records to current app.id
+    // Unify any older document records to current app.id and resolvedUserId
     if (idList.length > 0) {
       await Document.update(
-        { loan_application_id: app.id },
+        { 
+          loan_application_id: app.id,
+          ...(resolvedUserId ? { user_id: resolvedUserId } : {})
+        },
         { where: { loan_application_id: { [Op.in]: idList } } }
+      );
+    }
+    if (resolvedUserId) {
+      await Document.update(
+        { user_id: resolvedUserId },
+        { where: { loan_application_id: app.id, user_id: null } }
       );
     }
 
@@ -322,8 +481,11 @@ export const uploadDocs = async (req, res) => {
 
       await Document.destroy({
         where: {
-          loan_application_id: { [Op.in]: idList },
-          document_type: docType
+          document_type: docType,
+          [Op.or]: [
+            ...(resolvedUserId ? [{ user_id: resolvedUserId }] : []),
+            { loan_application_id: { [Op.in]: idList } }
+          ]
         }
       });
 
@@ -331,8 +493,11 @@ export const uploadDocs = async (req, res) => {
       if (docType === 'aadhar') {
         await Document.destroy({
           where: {
-            loan_application_id: { [Op.in]: idList },
-            document_type: { [Op.in]: ['aadhar_front', 'aadhar_back'] }
+            document_type: { [Op.in]: ['aadhar_front', 'aadhar_back'] },
+            [Op.or]: [
+              ...(resolvedUserId ? [{ user_id: resolvedUserId }] : []),
+              { loan_application_id: { [Op.in]: idList } }
+            ]
           }
         });
       }
@@ -341,13 +506,17 @@ export const uploadDocs = async (req, res) => {
       if (docType === 'aadhar_front' || docType === 'aadhar_back') {
         await Document.destroy({
           where: {
-            loan_application_id: { [Op.in]: idList },
-            document_type: 'aadhar'
+            document_type: 'aadhar',
+            [Op.or]: [
+              ...(resolvedUserId ? [{ user_id: resolvedUserId }] : []),
+              { loan_application_id: { [Op.in]: idList } }
+            ]
           }
         });
       }
 
       await Document.create({
+        user_id: resolvedUserId,
         loan_application_id: app.id,
         document_type: docType,
         file_name: file.originalname,
@@ -356,10 +525,13 @@ export const uploadDocs = async (req, res) => {
       });
     }
 
-    // Check all existing valid documents
+    // Check all existing valid documents for this user / application
     const allDocs = await Document.findAll({
       where: {
-        loan_application_id: { [Op.in]: idList }
+        [Op.or]: [
+          ...(resolvedUserId ? [{ user_id: resolvedUserId }] : []),
+          { loan_application_id: { [Op.in]: idList } }
+        ]
       },
       raw: true
     });
@@ -442,6 +614,12 @@ export const getApplicationDocuments = async (req, res) => {
       raw: true
     });
 
+    let resolvedUserId = req.user?.id || req.user?._id || null;
+    if (!resolvedUserId && app && app.borrower_id) {
+      const b = await Borrower.findByPk(app.borrower_id, { raw: true });
+      if (b && b.user_id) resolvedUserId = b.user_id;
+    }
+
     const possibleIds = new Set();
     if (app && app.id) possibleIds.add(Number(app.id));
     if (app && app.application_no) {
@@ -456,11 +634,36 @@ export const getApplicationDocuments = async (req, res) => {
 
     const documents = await Document.findAll({
       where: {
-        loan_application_id: { [Op.in]: idList }
+        [Op.or]: [
+          ...(resolvedUserId ? [{ user_id: resolvedUserId }] : []),
+          ...(idList.length > 0 ? [{ loan_application_id: { [Op.in]: idList } }] : [])
+        ]
       },
       raw: true
     });
-    res.json(documents);
+
+    if (documents.length === 0 && app && app.borrower_id) {
+      const borrowerApps = await Loan_Application.findAll({
+        attributes: ['id', 'application_no'],
+        where: { borrower_id: app.borrower_id },
+        raw: true
+      });
+      const otherIds = borrowerApps.map(a => Number(a.id)).concat(borrowerApps.map(a => String(a.application_no).replace(/^F4S-?/i, ''))).filter(Boolean);
+      if (otherIds.length > 0) {
+        const inheritedDocs = await Document.findAll({
+          where: {
+            loan_application_id: { [Op.in]: otherIds },
+            status: { [Op.ne]: 'rejected' }
+          },
+          raw: true
+        });
+        if (inheritedDocs.length > 0) {
+          return res.json(inheritedDocs);
+        }
+      }
+    }
+
+    return res.json(documents);
   } catch (err) {
     console.error("Client get documents error:", err);
     res.status(500).json({ message: "Failed to fetch documents", error: err.message });

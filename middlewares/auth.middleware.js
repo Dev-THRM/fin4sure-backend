@@ -2,6 +2,7 @@ import { verifyToken } from "../utils/jwt.utlis.js";
 import { sequelize } from "../config/db.js";
 import { DataTypes } from "sequelize";
 import User from "../models/user.js";
+import Partner from "../models/partner.model.js";
 import Admin from "../models/admin.model.js";
 
 export const verifyUser = async (req, res, next) => {
@@ -41,10 +42,18 @@ export const verifyUser = async (req, res, next) => {
     
     const isAdminUser = isAdminRole || (user && user.email === "admin@finn4sure.com") || (user && user.role_id === 3);
 
+    let userRole = isAdminUser ? 3 : (user?.role_id || Number(resolvedRole));
+    if (!isAdminUser && userRole === 1 && user) {
+      try {
+        const partnerRec = await Partner.findOne({ where: { user_id: user.id } });
+        if (partnerRec) userRole = 2;
+      } catch (_) {}
+    }
+
     req.user = {
       _id: user ? user.id : _id,
       id: user ? user.id : _id,
-      role: isAdminUser ? 3 : (user?.role_id || Number(resolvedRole)),
+      role: userRole,
       email: user ? user.email : ""
     };
 

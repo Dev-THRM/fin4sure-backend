@@ -19,6 +19,7 @@ pnpm-debug.log*
 # ===== Build / Dist =====
 dist/
 build/
+public/
 
 # ===== Coverage =====
 coverage/

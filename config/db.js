@@ -34,6 +34,53 @@ const connectDB = async () => {
     } catch (err) {
       // Safe to ignore
     }
+
+    try {
+      await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN dob DATE NULL;");
+      await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN gender ENUM('male', 'female', 'other') NULL;");
+      await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN address VARCHAR(255) NULL;");
+      await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN pincode_id INT NULL;");
+      await sequelize.query("ALTER TABLE borrowers MODIFY COLUMN profile_status ENUM('Active', 'Inactive', 'Completed', 'Incomplete', 'Under Review', 'Rejected') DEFAULT 'Active' NULL;");
+      console.log("Migration: Updated borrowers fields to nullable");
+    } catch (err) {
+      // Safe to ignore if already modified
+    }
+
+    try {
+      await sequelize.query("ALTER TABLE users MODIFY COLUMN email VARCHAR(255) NULL;");
+      console.log("Migration: Updated users.email to nullable");
+    } catch (err) {
+      // Safe to ignore
+    }
+
+    try {
+      await sequelize.query("ALTER TABLE users ADD UNIQUE (email);");
+      console.log("Migration: Added unique constraint to users.email");
+    } catch (err) {
+      // Safe to ignore if unique index already exists
+    }
+
+    try {
+      await sequelize.query("ALTER TABLE documents ADD COLUMN user_id INT NULL AFTER id;");
+      console.log("Migration: Added user_id column to documents");
+    } catch (err) {
+      // Safe to ignore if column already exists
+    }
+
+    try {
+      await sequelize.query("ALTER TABLE documents MODIFY COLUMN loan_application_id INT NULL;");
+    } catch (err) {}
+
+    try {
+      await sequelize.query(`
+        UPDATE documents d
+        JOIN loan_applications la ON (d.loan_application_id = la.id OR d.loan_application_id = la.application_no)
+        JOIN borrowers b ON la.borrower_id = b.id
+        SET d.user_id = b.user_id
+        WHERE d.user_id IS NULL AND b.user_id IS NOT NULL;
+      `);
+      console.log("Migration: Backfilled documents.user_id");
+    } catch (err) {}
   } catch (error) {
     console.error(`MySQL connection error: ${error.message}`);
   }

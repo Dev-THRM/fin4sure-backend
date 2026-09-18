@@ -9,7 +9,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "build": "node -e \"import fs from 'fs'; try { if (!fs.existsSync('dist')) fs.cpSync('client', 'dist', {recursive: true}); if (!fs.existsSync('public')) fs.cpSync('client', 'public', {recursive: true}); console.log('Build completed'); } catch (e) { console.log('Build notice:', e.message); }\""
   },
   "dependencies": {
     "axios": "^1.18.0",

@@ -1,6 +1,7 @@
 import Lender from '../models/lender.js';
 import Lender_Loan_Rates from '../models/lender_loan_rates.js';
 import Loan_type from '../models/loan_type.js';
+import { categorizeLender } from './admin.controller.js';
 
 export const getLenders = async (req, res) => {
   try {
@@ -29,7 +30,7 @@ export const getLenders = async (req, res) => {
         id: l.id,
         name: l.name,
         short: l.short || l.name,
-        type: l.type ? (l.type.toUpperCase() === 'PSU' ? 'PSU' : l.type.toLowerCase().includes('nbfc') ? 'NBFC/HFC' : l.type.toLowerCase().includes('small') ? 'SFB' : 'Private') : 'Private',
+        type: categorizeLender(l.type, l.name),
         emoji: '🏦',
         logo: null,
         offer: l.offer || 'Competitive interest rates',

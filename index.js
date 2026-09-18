@@ -42,6 +42,29 @@ import { startScraperScheduler } from './scrapers/scheduler.js';
 
 const app = express();
 
+app.set("trust proxy", 1);
+
+// Security Headers & Canonical HTTPS / non-www redirection
+app.use((req, res, next) => {
+  const host = req.headers.host || "";
+  const isWww = host.startsWith("www.");
+  const proto = req.headers["x-forwarded-proto"] || req.protocol;
+
+  // Modern HTTP Security Headers
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+
+  // Canonical redirect www -> non-www, http -> https
+  if (isWww || (proto === "http" && !host.includes("localhost") && !host.includes("127.0.0.1"))) {
+    const cleanHost = host.replace(/^www\./, "");
+    return res.redirect(301, `https://${cleanHost}${req.originalUrl}`);
+  }
+  next();
+});
+
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -313,10 +336,12 @@ app.get("/api/diagnose-paths", async (req, res) => {
 
 const PORT = process.env.PORT || 8000;
 
-// Start HTTP server immediately so Hostinger proxy binds the port without timing out
-app.listen(PORT, () => {
-  console.log(`Server is running on PORT ${PORT}`);
-});
+// Start HTTP server when not running in serverless environment (e.g. Vercel)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Server is running on PORT ${PORT}`);
+  });
+}
 
 const startServer = async () => {
   try {
@@ -331,6 +356,34 @@ const startServer = async () => {
       await sequelize.query("ALTER TABLE loan_applications ADD COLUMN lender_id INT NULL;");
       await sequelize.query("ALTER TABLE documents MODIFY COLUMN status VARCHAR(50) DEFAULT 'pending';");
       await sequelize.query("ALTER TABLE documents MODIFY COLUMN document_type VARCHAR(255) NOT NULL;");
+      
+      // Ensure documents table has user_id column and nullable loan_application_id
+      try {
+        await sequelize.query("ALTER TABLE documents ADD COLUMN user_id INT NULL AFTER id;");
+        console.log("documents.user_id column added.");
+      } catch (colErr) {
+        if (!colErr.message.includes('Duplicate column') && !colErr.message.includes('already exists')) {
+          console.log("documents.user_id alter notice:", colErr.message);
+        }
+      }
+      try {
+        await sequelize.query("ALTER TABLE documents MODIFY COLUMN loan_application_id INT NULL;");
+      } catch (_) {}
+
+      // Backfill user_id on existing documents from loan_applications -> borrowers -> user_id
+      try {
+        await sequelize.query(`
+          UPDATE documents d
+          JOIN loan_applications la ON (d.loan_application_id = la.id OR d.loan_application_id = la.application_no)
+          JOIN borrowers b ON la.borrower_id = b.id
+          SET d.user_id = b.user_id
+          WHERE d.user_id IS NULL AND b.user_id IS NOT NULL;
+        `);
+        console.log("Existing documents backfilled with user_id.");
+      } catch (backfillErr) {
+        console.log("Document user_id backfill notice:", backfillErr.message);
+      }
+
       console.log("Database schema updated.");
     } catch (err) {
       console.log("Database schema alter notice:", err.message);
@@ -379,4 +432,24 @@ const startServer = async () => {
   }
 };
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+} else {
+  let dbInitPromise = null;
+  app.use(async (req, res, next) => {
+    if (!dbInitPromise) {
+      dbInitPromise = (async () => {
+        try {
+          await connectDB();
+          setupAssociations();
+        } catch (e) {
+          console.error("Serverless DB init error:", e.message);
+        }
+      })();
+    }
+    await dbInitPromise;
+    next();
+  });
+}
+
+export default app;

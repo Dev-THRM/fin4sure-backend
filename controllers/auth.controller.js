@@ -68,6 +68,7 @@ export const signUpHandler = async (req, res) => {
       })
       .json({
         success: true,
+        accessToken,
         user: {
           _id: newUser.id,
           name: newUser.name,
@@ -77,10 +78,10 @@ export const signUpHandler = async (req, res) => {
       });
   } catch (err) {
     console.error("Signup error:", err);
-    if (err.message === "User already exists") {
+    if (err.message && (err.message.includes("already registered") || err.message.includes("already exists"))) {
       return res.status(409).json({ message: err.message });
     }
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(400).json({ message: err.message || "Internal server error" });
   }
 };
 
@@ -142,15 +143,20 @@ export const SendOTP = async (req, res) => {
  */
 export const SendEmailOTP = async (req, res) => {
   try {
-    const { email, purpose } = req.body;
+    const { email, purpose, number } = req.body;
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ message: 'A valid email address is required.' });
     }
-    await sendEmailOTPService(email, purpose);
+    await sendEmailOTPService(email, purpose, number);
     return res.json({ success: true, message: 'OTP sent to your email address.' });
   } catch (error) {
     console.error('Error sending email OTP:', error);
-    const status = ['No account found with this email address.', 'Inactive partner', 'Account inactive'].includes(error.message) ? 400 : 500;
+    const isClientError = [
+      'No account found with this email address.',
+      'Inactive partner',
+      'Account inactive'
+    ].includes(error.message) || error.message.includes('already registered') || error.message.includes('another account');
+    const status = isClientError ? 400 : 500;
     return res.status(status).json({ message: error.message || 'Failed to send OTP email.' });
   }
 };
@@ -371,8 +377,22 @@ export const profileHandler = async (req, res) => {
       user = await User.findOne({ order: [['createdAt', 'DESC']], raw: true });
     }
 
+    let partner = null;
+    if (user && !isAdmin) {
+      try {
+        partner = await Partner.findOne({ where: { user_id: user.id }, raw: true });
+      } catch (pErr) {
+        console.error("Partner check error in profileHandler:", pErr.message);
+      }
+    }
+
     let role = "borrower";
-    if (user && user.role_id === 2) role = "partner";
+    if (user && (user.role_id === 2 || partner)) {
+      role = "partner";
+      if (user.role_id !== 2) {
+        User.update({ role_id: 2 }, { where: { id: user.id } }).catch(() => {});
+      }
+    }
     if (user && user.role_id === 3) role = "admin";
 
     let clientDetails = {};
@@ -439,7 +459,9 @@ export const profileHandler = async (req, res) => {
     let partnerDetails = {};
     if (role === "partner" && user) {
       try {
-        let partner = await Partner.findOne({ where: { user_id: user.id }, raw: true });
+        if (!partner) {
+          partner = await Partner.findOne({ where: { user_id: user.id }, raw: true });
+        }
         let cityName = "";
         if (partner && partner.city_id) {
           const cRec = await City.findByPk(partner.city_id, { raw: true });

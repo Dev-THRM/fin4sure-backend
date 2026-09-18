@@ -27,23 +27,103 @@ export const signUpService = async (data) => {
   const { name, email, number, password, role_id, dob, address, state, district, pincode, city, broker_id } = data;
 
   const normalizedEmail = email.toLowerCase().trim();
+  const cleanMobile = (number || "").trim();
+  const hashedPassword = await bcrypt.hash(password, 10);
 
-  const existingUser = await User.findOne({
-    where: {
-      [Op.or]: [{ mob_no: number }, { email: normalizedEmail }]
+  const userByEmail = await User.findOne({ where: { email: normalizedEmail } });
+  if (userByEmail) {
+    if (role_id === 2) {
+      userByEmail.role_id = 2;
+      userByEmail.password_hash = hashedPassword;
+      userByEmail.name = name;
+      userByEmail.status = 'active';
+      if (cleanMobile) userByEmail.mob_no = cleanMobile;
+      await userByEmail.save();
+
+      const cityName = (city || "Mumbai").trim();
+      const districtName = (district || cityName || "Mumbai City").trim();
+      const stateName = (state || "Maharashtra").trim();
+
+      const [stateObj] = await State.findOrCreate({
+        where: { name: stateName },
+        defaults: { country: "India" },
+      });
+
+      const [districtObj] = await District.findOrCreate({
+        where: { name: districtName },
+        defaults: { state_id: stateObj.id },
+      });
+
+      const [cityObj] = await City.findOrCreate({
+        where: { name: cityName },
+        defaults: { district_id: districtObj.id },
+      });
+
+      const existingPartner = await Partner.findOne({ where: { user_id: userByEmail.id } });
+      if (!existingPartner) {
+        await Partner.create({
+          user_id: userByEmail.id,
+          city_id: cityObj ? cityObj.id : null,
+        });
+      } else if (cityObj && existingPartner.city_id !== cityObj.id) {
+        existingPartner.city_id = cityObj.id;
+        await existingPartner.save();
+      }
+
+      return userByEmail;
     }
-  });
-
-  if (existingUser) {
-    throw new Error("User already exists");
+    throw new Error("This email is already registered. Please sign in instead.");
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const userByMobile = cleanMobile ? await User.findOne({ where: { mob_no: cleanMobile } }) : null;
+  if (userByMobile) {
+    if (role_id === 2) {
+      userByMobile.role_id = 2;
+      userByMobile.password_hash = hashedPassword;
+      userByMobile.name = name;
+      userByMobile.email = normalizedEmail;
+      userByMobile.status = 'active';
+      await userByMobile.save();
+
+      const cityName = (city || "Mumbai").trim();
+      const districtName = (district || cityName || "Mumbai City").trim();
+      const stateName = (state || "Maharashtra").trim();
+
+      const [stateObj] = await State.findOrCreate({
+        where: { name: stateName },
+        defaults: { country: "India" },
+      });
+
+      const [districtObj] = await District.findOrCreate({
+        where: { name: districtName },
+        defaults: { state_id: stateObj.id },
+      });
+
+      const [cityObj] = await City.findOrCreate({
+        where: { name: cityName },
+        defaults: { district_id: districtObj.id },
+      });
+
+      const existingPartner = await Partner.findOne({ where: { user_id: userByMobile.id } });
+      if (!existingPartner) {
+        await Partner.create({
+          user_id: userByMobile.id,
+          city_id: cityObj ? cityObj.id : null,
+        });
+      } else if (cityObj && existingPartner.city_id !== cityObj.id) {
+        existingPartner.city_id = cityObj.id;
+        await existingPartner.save();
+      }
+
+      return userByMobile;
+    }
+    throw new Error("This mobile number is already registered. Please sign in instead.");
+  }
 
   const newUser = await User.create({
     name,
     email: normalizedEmail,
-    mob_no: number,
+    mob_no: cleanMobile,
     password_hash: hashedPassword,
     role_id,
     status: 'active'
@@ -52,31 +132,31 @@ export const signUpService = async (data) => {
   if (role_id === 2) {
     // Partner / Broker role
     const cityName = (city || "Mumbai").trim();
-    const districtName = (district || "Mumbai City").trim();
+    const districtName = (district || cityName || "Mumbai City").trim();
     const stateName = (state || "Maharashtra").trim();
 
     // 1. Find or create State
     const [stateObj] = await State.findOrCreate({
       where: { name: stateName },
-      defaults: { country: "India" }
+      defaults: { country: "India" },
     });
 
     // 2. Find or create District
     const [districtObj] = await District.findOrCreate({
       where: { name: districtName },
-      defaults: { state_id: stateObj.id }
+      defaults: { state_id: stateObj.id },
     });
 
     // 3. Find or create City
     const [cityObj] = await City.findOrCreate({
       where: { name: cityName },
-      defaults: { district_id: districtObj.id }
+      defaults: { district_id: districtObj.id },
     });
 
-    // 4. Create Partner
+    // 4. Partner table schema: id, user_id, city_id, createdAt, updatedAt
     await Partner.create({
       user_id: newUser.id,
-      city_id: cityObj.id
+      city_id: cityObj ? cityObj.id : null,
     });
   } else if (role_id === 1) {
     // Borrower role (User already created)
@@ -90,29 +170,54 @@ export const registerBorrowerService = async (data) => {
   const { name, email, number, dob, gender, address, pincode, state, district, password, loanAmount, tenure, loanPurpose, loanType, selectedLenders, broker_id } = data;
 
   const normalizedEmail = email.toLowerCase().trim();
+  const cleanMobile = (number || "").trim();
 
-  let existingUser = await User.findOne({
-    where: {
-      [Op.or]: [{ mob_no: number }, { email: normalizedEmail }]
-    }
+  // 1. Check if email is already registered
+  const existingUserByEmail = await User.findOne({
+    where: { email: normalizedEmail }
   });
+
+  // 2. Check if mobile is already registered
+  const existingUserByMobile = cleanMobile ? await User.findOne({
+    where: { mob_no: cleanMobile }
+  }) : null;
+
+  // If email is already registered to a different user, block registration!
+  if (existingUserByEmail && existingUserByMobile && existingUserByEmail.id !== existingUserByMobile.id) {
+    throw new Error("This email is already registered to another account. Please use your registered phone number or log in.");
+  }
+
+  if (existingUserByEmail && !existingUserByMobile) {
+    if (existingUserByEmail.mob_no && cleanMobile && existingUserByEmail.mob_no !== cleanMobile) {
+      throw new Error("This email is already registered to another account. Please use your registered phone number or log in.");
+    }
+  }
+
+  if (!existingUserByEmail && existingUserByMobile) {
+    if (existingUserByMobile.email && existingUserByMobile.email !== normalizedEmail) {
+      throw new Error("This mobile number is already registered with a different email address.");
+    }
+  }
+
+  let existingUser = existingUserByEmail || existingUserByMobile;
 
   const transaction = await sequelize.transaction();
 
   try {
-    if (existingUser) {
-      throw new Error("User already exists with this email or mobile number.");
+    let targetUser = existingUser;
+    if (!targetUser) {
+      const hashedPassword = await bcrypt.hash(password || "Pass@1234", 10);
+      targetUser = await User.create({
+        name: name || "Borrower",
+        email: normalizedEmail,
+        mob_no: cleanMobile,
+        password_hash: hashedPassword,
+        role_id: 1, // Borrower role
+        status: 'active'
+      }, { transaction });
+    } else if (name && !existingUser.name) {
+      await existingUser.update({ name }, { transaction });
     }
-
-    const hashedPassword = await bcrypt.hash(password || "Pass@1234", 10);
-    const targetUser = await User.create({
-      name,
-      email: normalizedEmail,
-      mob_no: number,
-      password_hash: hashedPassword,
-      role_id: 1, // Borrower role
-      status: 'active'
-    }, { transaction });
 
     let pincodeRecord = null;
     if (pincode) {
@@ -292,7 +397,7 @@ export const sendOTPService = async (number) => {
 // EMAIL OTP SERVICES  (uses Resend; mob_no column left untouched for mobile OTP)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const sendEmailOTPService = async (email, purposeStr = 'email_login') => {
+export const sendEmailOTPService = async (email, purposeStr = 'email_login', mobileNumber = null) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   // If this is for login, make sure the user actually exists
@@ -307,6 +412,24 @@ export const sendEmailOTPService = async (email, purposeStr = 'email_login') => 
       } else {
         throw new Error('Account inactive');
       }
+    }
+  }
+
+  // If this is for general signup, disallow if email is already registered
+  if (purposeStr === 'signup') {
+    const user = await User.findOne({ where: { email: normalizedEmail } });
+    if (user) {
+      throw new Error('This email address is already registered. Please sign in instead.');
+    }
+  }
+
+  // If this is for borrower registration onboarding with a mobile number,
+  // verify if the email is already registered to another mobile number
+  if (purposeStr === 'registration' && mobileNumber) {
+    const cleanMobile = mobileNumber.trim();
+    const existing = await User.findOne({ where: { email: normalizedEmail } });
+    if (existing && existing.mob_no && existing.mob_no !== cleanMobile) {
+      throw new Error('This email address is already registered to another account. Please use your registered phone number or log in.');
     }
   }
 
@@ -392,9 +515,19 @@ export const otpLoginService = async (email, otp, expectedRole) => {
   }
 
   if (expectedRole) {
-    const roleId = expectedRole === 'partner' ? 2 : (expectedRole === 'admin' ? 3 : 1);
+    const roleId = (expectedRole === 'partner' || expectedRole === 'broker') ? 2 : (expectedRole === 'admin' ? 3 : 1);
     if (user.role_id !== roleId) {
-      throw new Error(`This user is not a ${expectedRole}, do you want to register?`);
+      if (roleId === 2) {
+        const partner = await Partner.findOne({ where: { user_id: user.id } });
+        if (partner) {
+          user.role_id = 2;
+          await user.save();
+        } else {
+          throw new Error(`This user is not a ${expectedRole}, do you want to register?`);
+        }
+      } else {
+        throw new Error(`This user is not a ${expectedRole}, do you want to register?`);
+      }
     }
   }
 
@@ -458,9 +591,19 @@ export const loginService = async (email, password, expectedRole) => {
   }
 
   if (expectedRole) {
-    const roleId = expectedRole === 'partner' ? 2 : (expectedRole === 'admin' ? 3 : 1);
+    const roleId = (expectedRole === 'partner' || expectedRole === 'broker') ? 2 : (expectedRole === 'admin' ? 3 : 1);
     if (user.role_id !== roleId) {
-      throw new Error(`This user is not a ${expectedRole}, do you want to register?`);
+      if (roleId === 2) {
+        const partner = await Partner.findOne({ where: { user_id: user.id } });
+        if (partner) {
+          user.role_id = 2;
+          await user.save();
+        } else {
+          throw new Error(`This user is not a ${expectedRole}, do you want to register?`);
+        }
+      } else {
+        throw new Error(`This user is not a ${expectedRole}, do you want to register?`);
+      }
     }
   }
 
