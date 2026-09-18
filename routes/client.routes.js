@@ -38,6 +38,7 @@ const upload = multer({
 console.log("=== UPLOADS_DIR ENV on startup:", process.env.UPLOADS_DIR || "(not set)", "===");
 console.log("=== Resolved uploads dir on startup:", getUploadsDir(), "===");
 
+
 // Diagnostic route: no auth so we can verify live server state easily
 router.get('/debug-uploads', (req, res) => {
   const dir = getUploadsDir();
