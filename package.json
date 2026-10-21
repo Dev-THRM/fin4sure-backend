@@ -13,7 +13,7 @@
     "build": "node -e \"import fs from 'fs'; try { if (!fs.existsSync('dist')) fs.cpSync('client', 'dist', {recursive: true}); if (!fs.existsSync('public')) fs.cpSync('client', 'public', {recursive: true}); console.log('Build completed'); } catch (e) { console.log('Build notice:', e.message); }\""
   },
   "dependencies": {
-    "axios": "^1.18.0",
+    "axios": "^1.20.0",
     "bcrypt": "^6.0.0",
     "cheerio": "^1.2.0",
     "cookie-parser": "^1.4.7",
@@ -22,11 +22,11 @@
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
-    "multer": "^2.2.0",
-    "mysql2": "^3.23.0",
+    "multer": "^2.4.0",
+    "mysql2": "^3.23.1",
     "node-cron": "^4.6.0",
     "node-fetch": "^3.3.2",
-    "nodemailer": "^9.0.5",
+    "nodemailer": "^9.1.1",
     "pg": "^8.22.0",
     "pg-hstore": "^2.3.4",
     "resend": "^6.22.0",
